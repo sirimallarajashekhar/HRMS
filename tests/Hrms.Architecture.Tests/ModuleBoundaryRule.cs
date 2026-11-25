@@ -16,6 +16,8 @@ public static class ModuleBoundaryRule
 
         foreach (var module in modules)
         {
+            // NetArchTest matches namespaces by prefix, so layer sub-namespaces must be nested (Hrms.X.Domain.Events),
+            // never siblings that merely start with the layer name (Hrms.X.DomainEvents).
             var forbidden = modules
                 .Where(other => other != module)
                 .SelectMany(other => new[] { $"Hrms.{other}.Domain", $"Hrms.{other}.Infrastructure" })

@@ -29,13 +29,18 @@ builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = 
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
 builder.Services.AddApiVersioning(options =>
-{
-    options.DefaultApiVersion = new ApiVersion(1, 0);
-    options.AssumeDefaultVersionWhenUnspecified = false;
-    options.ReportApiVersions = true;
-    options.ApiVersionReader = new UrlSegmentApiVersionReader();
-});
-builder.Services.AddOpenApi("v1");
+    {
+        options.DefaultApiVersion = new ApiVersion(1, 0);
+        options.AssumeDefaultVersionWhenUnspecified = false;
+        options.ReportApiVersions = true;
+        options.ApiVersionReader = new UrlSegmentApiVersionReader();
+    })
+    .AddApiExplorer(options =>
+    {
+        options.GroupNameFormat = "'v'V";
+        options.SubstituteApiVersionInUrl = true;
+    })
+    .AddOpenApi();
 
 // Dependency checks (MySQL, Redis, RabbitMQ) are added with the infrastructure in P0.2/P0.3 using the "ready" tag.
 builder.Services.AddHealthChecks()
@@ -43,9 +48,10 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+// Correlation first so the id is in the log scope for the exception handler and survives on error responses.
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
-app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = check => check.Tags.Contains("live") });
@@ -55,10 +61,14 @@ ApiVersionSet versionSet = app.NewApiVersionSet().HasApiVersion(new ApiVersion(1
 var v1 = app.MapGroup("/api/v{version:apiVersion}").WithApiVersionSet(versionSet);
 v1.MapCoreEndpoints();
 
-app.MapOpenApi();
-if (app.Environment.IsDevelopment())
+// The API description is not served in Production until it can sit behind authorization (P0.4).
+if (!app.Environment.IsProduction())
 {
-    app.MapScalarApiReference();
+    app.MapOpenApi().WithDocumentPerVersion();
+    if (app.Environment.IsDevelopment())
+    {
+        app.MapScalarApiReference();
+    }
 }
 
 await app.RunAsync();

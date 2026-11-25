@@ -29,6 +29,22 @@ public class ResultTests
     }
 
     [Fact]
+    public void Success_WithNullValue_Throws()
+    {
+        var act = () => Result.Success<string>(null!);
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void FailureOfT_WithNoneError_Throws()
+    {
+        var act = () => Result.Failure<int>(Error.None);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void Failure_WithNoneError_Throws()
     {
         var act = () => Result.Failure(Error.None);

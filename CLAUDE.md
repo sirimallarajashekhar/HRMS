@@ -83,6 +83,9 @@ Generic, multi-tenant HRMS for organisations with 500+ employees. Specs: docs/PR
 - Table names snake_case singular; C# PascalCase. One EF configuration class per entity.
 - Every feature ships with unit tests + at least one integration test + a tenant-isolation test for new endpoints.
 - Commit messages: <type>(<module>): <summary>, e.g. feat(leave): add accrual job.
+- Layer sub-namespaces are nested (Hrms.X.Domain.Events), never siblings that start with a layer name (Hrms.X.DomainEvents): architecture tests match namespaces by prefix.
+- New module projects must be named Hrms.<Module>.(Domain|Application|Infrastructure|Api) under src/Modules/<Module>/ and referenced by tests/Hrms.Architecture.Tests so the boundary rules pick them up.
+- Test libraries: FluentAssertions stays on 7.x (v8 needs a commercial license). Pin Microsoft.* packages to 10.0.x (11.0 does not run on net10.0).
 
 ## Commands
 - Build: dotnet build Hrms.sln

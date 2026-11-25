@@ -1,4 +1,3 @@
-using System.Reflection;
 using FluentAssertions;
 using NetArchTest.Rules;
 
@@ -6,64 +5,102 @@ namespace Hrms.Architecture.Tests;
 
 public class ArchitectureTests
 {
-    private static readonly Assembly SharedKernel = typeof(Hrms.SharedKernel.Error).Assembly;
-    private static readonly Assembly CoreDomain = Hrms.Core.Domain.AssemblyReference.Assembly;
-    private static readonly Assembly CoreApplication = Hrms.Core.Application.AssemblyReference.Assembly;
-    private static readonly Assembly CoreInfrastructure = Hrms.Core.Infrastructure.AssemblyReference.Assembly;
-    private static readonly Assembly CoreApi = Hrms.Core.Api.AssemblyReference.Assembly;
-
-    // Add each new module's name here when its projects are created.
-    private static readonly string[] Modules = ["Core"];
+    [Fact]
+    public void ModuleDiscovery_FindsEveryModuleProjectOnDisk()
+    {
+        // Guards the guard: if a module's projects are not referenced by this test project, its rules would silently not run.
+        SolutionModel.ModuleNames.Should().Contain("Core");
+        SolutionModel.ModuleAssemblies.Count.Should().Be(SolutionModel.ModuleProjectCountOnDisk());
+    }
 
     [Fact]
-    public void RealModules_DoNotDependOnOtherModulesDomainOrInfrastructure()
+    public void Modules_DoNotDependOnOtherModulesDomainOrInfrastructure()
     {
-        var violations = ModuleBoundaryRule.FindViolations(
-            [CoreDomain, CoreApplication, CoreInfrastructure, CoreApi],
-            Modules);
+        var violations = ModuleBoundaryRule.FindViolations(SolutionModel.ModuleAssemblies, SolutionModel.ModuleNames);
 
         violations.Should().BeEmpty();
     }
 
     [Fact]
-    public void ModuleBoundaryRule_WhenModuleReachesIntoAnotherModulesDomain_ReportsViolation()
+    public void ModuleBoundaryRule_WhenModuleReachesIntoAnotherModule_ReportsDomainAndInfrastructureAccess()
     {
         var violations = ModuleBoundaryRule.FindViolations(
             [typeof(ArchitectureTests).Assembly],
             ["FixtureA", "FixtureB"]);
 
-        violations.Should().ContainSingle().Which.Should().Contain("BadHandler");
+        violations.Should().HaveCount(2);
+        violations.Should().Contain(v => v.Contains("BadDomainHandler", StringComparison.Ordinal));
+        violations.Should().Contain(v => v.Contains("BadInfrastructureHandler", StringComparison.Ordinal));
     }
 
     [Fact]
     public void Domain_DoesNotDependOnOuterLayersOrFrameworks()
     {
-        var result = Types.InAssembly(CoreDomain)
-            .ShouldNot().HaveDependencyOnAny(
-                "Hrms.Core.Application", "Hrms.Core.Infrastructure", "Hrms.Core.Api",
-                "Microsoft.AspNetCore", "Microsoft.EntityFrameworkCore")
-            .GetResult();
+        foreach (var module in SolutionModel.ModuleNames)
+        {
+            var result = Types.InAssembly(SolutionModel.Layer(module, "Domain"))
+                .ShouldNot().HaveDependencyOnAny(
+                    $"Hrms.{module}.Application.", $"Hrms.{module}.Infrastructure.", $"Hrms.{module}.Api.",
+                    "Microsoft.AspNetCore", "Microsoft.EntityFrameworkCore")
+                .GetResult();
 
-        result.IsSuccessful.Should().BeTrue(string.Join(", ", result.FailingTypeNames ?? []));
+            result.IsSuccessful.Should().BeTrue($"{module}.Domain: {string.Join(", ", result.FailingTypeNames ?? [])}");
+        }
     }
 
     [Fact]
     public void Application_DoesNotDependOnInfrastructureOrApi()
     {
-        var result = Types.InAssembly(CoreApplication)
-            .ShouldNot().HaveDependencyOnAny("Hrms.Core.Infrastructure", "Hrms.Core.Api", "Microsoft.AspNetCore")
-            .GetResult();
+        foreach (var module in SolutionModel.ModuleNames)
+        {
+            var result = Types.InAssembly(SolutionModel.Layer(module, "Application"))
+                .ShouldNot().HaveDependencyOnAny($"Hrms.{module}.Infrastructure.", $"Hrms.{module}.Api.", "Microsoft.AspNetCore")
+                .GetResult();
 
-        result.IsSuccessful.Should().BeTrue(string.Join(", ", result.FailingTypeNames ?? []));
+            result.IsSuccessful.Should().BeTrue($"{module}.Application: {string.Join(", ", result.FailingTypeNames ?? [])}");
+        }
     }
 
     [Fact]
-    public void SharedKernel_DoesNotDependOnModulesOrPlatform()
+    public void ModulesAndPlatform_DoNotDependOnTheHosts()
     {
-        var result = Types.InAssembly(SharedKernel)
-            .ShouldNot().HaveDependencyOnAny("Hrms.Core", "Hrms.Workflow", "Hrms.Policy", "Hrms.Notifications", "Hrms.Api")
-            .GetResult();
+        var subjects = SolutionModel.ProductAssemblies
+            .Where(a => SolutionModel.IsModuleAssemblyName(a.GetName().Name!) || SolutionModel.PlatformAssemblyNames.Contains(a.GetName().Name))
+            .ToArray();
 
-        result.IsSuccessful.Should().BeTrue(string.Join(", ", result.FailingTypeNames ?? []));
+        var offenders = subjects
+            .SelectMany(a => SolutionModel.ReferencedHrmsAssemblies(a).Select(r => (From: a.GetName().Name!, To: r)))
+            .Where(edge => edge.To is "Hrms.Api" or "Hrms.Worker")
+            .ToArray();
+
+        offenders.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Platform_DoesNotReferenceModules()
+    {
+        var offenders = SolutionModel.ProductAssemblies
+            .Where(a => SolutionModel.PlatformAssemblyNames.Contains(a.GetName().Name))
+            .SelectMany(a => SolutionModel.ReferencedHrmsAssemblies(a).Select(r => (From: a.GetName().Name!, To: r)))
+            .Where(edge => SolutionModel.IsModuleAssemblyName(edge.To))
+            .ToArray();
+
+        offenders.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Contracts_HasNoDependenciesOnOtherSolutionAssemblies()
+    {
+        var contracts = SolutionModel.ProductAssemblies.Single(a => a.GetName().Name == "Hrms.Contracts");
+
+        SolutionModel.ReferencedHrmsAssemblies(contracts).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SharedKernel_HasNoDependenciesOnOtherSolutionAssemblies()
+    {
+        var kernel = SolutionModel.ProductAssemblies.Single(a => a.GetName().Name == "Hrms.SharedKernel");
+
+        SolutionModel.ReferencedHrmsAssemblies(kernel).Should().BeEmpty();
     }
 }
