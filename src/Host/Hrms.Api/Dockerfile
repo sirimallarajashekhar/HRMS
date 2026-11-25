@@ -7,7 +7,7 @@ COPY src ./src
 RUN --mount=type=cache,target=/root/.nuget/packages \
     dotnet publish src/Host/Hrms.Api/Hrms.Api.csproj -c Release -o /app/publish
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 # Non-root user provided by the base image.
