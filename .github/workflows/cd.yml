@@ -1,0 +1,95 @@
+# Skeleton: builds and publishes images, then promotes through dev -> staging -> prod.
+# Deploy steps are placeholders until the hosting platform is chosen. Production requires manual approval:
+# create the GitHub environments "dev", "staging" and "prod" and add required reviewers to "prod"
+# (Settings -> Environments). Secrets below are placeholders to be created per environment.
+name: CD
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Image tag to deploy (defaults to the commit SHA)
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  publish:
+    name: publish-images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          version="$INPUT_VERSION"
+          if [ -z "$version" ]; then
+            if [ "$GITHUB_REF_TYPE" = "tag" ]; then version="$GITHUB_REF_NAME"; else version="${GITHUB_SHA::12}"; fi
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "repo=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push hrms-api
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/Host/Hrms.Api/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ steps.meta.outputs.repo }}/hrms-api:${{ steps.meta.outputs.version }}
+      - name: Push hrms-worker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/Host/Hrms.Worker/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ steps.meta.outputs.repo }}/hrms-worker:${{ steps.meta.outputs.version }}
+
+  deploy-dev:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Deploy ${{ needs.publish.outputs.version }} to dev
+        env:
+          DEPLOY_TARGET: ${{ secrets.DEPLOY_TARGET }}   # placeholder
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}     # placeholder
+        run: echo "TODO - deploy ${{ needs.publish.outputs.version }} to dev (platform not chosen yet)"
+
+  deploy-staging:
+    needs: [publish, deploy-dev]
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Deploy ${{ needs.publish.outputs.version }} to staging
+        env:
+          DEPLOY_TARGET: ${{ secrets.DEPLOY_TARGET }}
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+        run: echo "TODO - deploy ${{ needs.publish.outputs.version }} to staging (platform not chosen yet)"
+
+  deploy-prod:
+    needs: [publish, deploy-staging]
+    runs-on: ubuntu-latest
+    environment: prod # configure required reviewers on this environment = manual approval gate
+    steps:
+      - name: Deploy ${{ needs.publish.outputs.version }} to prod
+        env:
+          DEPLOY_TARGET: ${{ secrets.DEPLOY_TARGET }}
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+        run: echo "TODO - deploy ${{ needs.publish.outputs.version }} to prod (platform not chosen yet)"

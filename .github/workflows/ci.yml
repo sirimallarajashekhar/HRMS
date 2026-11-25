@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore
+        run: dotnet restore Hrms.sln
+      - name: Build (warnings are errors)
+        run: dotnet build Hrms.sln -c Release --no-restore -warnaserror
+      - name: Unit and architecture tests
+        run: >
+          dotnet test Hrms.sln -c Release --no-build
+          --filter "FullyQualifiedName!~IntegrationTests"
+          --logger "trx;LogFileName=unit.trx" --results-directory TestResults
+      - name: Integration tests (Testcontainers MySQL)
+        run: >
+          dotnet test tests/Hrms.Core.IntegrationTests -c Release --no-build
+          --logger "trx;LogFileName=integration.trx" --results-directory TestResults
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults
+
+  vulnerabilities:
+    name: dependency-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Fail on vulnerable packages (including transitive)
+        run: |
+          dotnet restore Hrms.sln
+          dotnet list Hrms.sln package --vulnerable --include-transitive 2>&1 | tee vulnerabilities.txt
+          if grep -q "has the following vulnerable packages" vulnerabilities.txt; then
+            echo "::error::Vulnerable NuGet packages found (see log)."
+            exit 1
+          fi
+
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    name: docker-images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image:
+          - { name: hrms-api, dockerfile: src/Host/Hrms.Api/Dockerfile }
+          - { name: hrms-worker, dockerfile: src/Host/Hrms.Worker/Dockerfile }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.image.name }} (not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.image.dockerfile }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.image.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}

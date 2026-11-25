@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    ignore:
+      # Microsoft.* 11.x targets net11; stay on 10.x until we move the SDK.
+      - dependency-name: "Microsoft.*"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: docker
+    directories: ["/src/Host/Hrms.Api", "/src/Host/Hrms.Worker"]
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
