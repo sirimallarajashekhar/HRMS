@@ -86,6 +86,7 @@ Generic, multi-tenant HRMS for organisations with 500+ employees. Specs: docs/PR
 - Layer sub-namespaces are nested (Hrms.X.Domain.Events), never siblings that start with a layer name (Hrms.X.DomainEvents): architecture tests match namespaces by prefix.
 - New module projects must be named Hrms.<Module>.(Domain|Application|Infrastructure|Api) under src/Modules/<Module>/ and referenced by tests/Hrms.Architecture.Tests so the boundary rules pick them up.
 - Test libraries: FluentAssertions stays on 7.x (v8 needs a commercial license). Pin Microsoft.* packages to 10.0.x (11.0 does not run on net10.0).
+- EF Core exception: Microsoft.EntityFrameworkCore and .Relational stay on 9.0.x with Pomelo.EntityFrameworkCore.MySql 9.0.0 (MIT) because Pomelo has no EF Core 10 release; Oracle's MySql.EntityFrameworkCore is GPL-2.0 and adds a second driver, so it is not used. Move to EF Core 10 deliberately once Pomelo ships it (Dependabot ignores Microsoft.* major bumps).
 - Dockerfiles must COPY .editorconfig with the build props, otherwise analyzer settings differ inside the image and the build fails.
 - Infrastructure host ports are env-configurable in docker-compose.yml (see .env.example); .env is git-ignored.
 

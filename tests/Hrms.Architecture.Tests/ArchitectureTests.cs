@@ -41,7 +41,7 @@ public class ArchitectureTests
             var result = Types.InAssembly(SolutionModel.Layer(module, "Domain"))
                 .ShouldNot().HaveDependencyOnAny(
                     $"Hrms.{module}.Application.", $"Hrms.{module}.Infrastructure.", $"Hrms.{module}.Api.",
-                    "Microsoft.AspNetCore", "Microsoft.EntityFrameworkCore")
+                    "Microsoft.AspNetCore", "Microsoft.EntityFrameworkCore", "Hrms.Persistence")
                 .GetResult();
 
             result.IsSuccessful.Should().BeTrue($"{module}.Domain: {string.Join(", ", result.FailingTypeNames ?? [])}");
