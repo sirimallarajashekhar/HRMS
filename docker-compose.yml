@@ -4,7 +4,7 @@ name: hrms
 
 services:
   mysql:
-    image: mysql:8.4
+    image: mysql:26.7
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?copy .env.example to .env}
@@ -33,7 +33,7 @@ services:
       start_period: 20s
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:8.0-alpine
     restart: unless-stopped
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?copy .env.example to .env}", "--appendonly", "yes"]
     environment:
@@ -86,7 +86,7 @@ services:
       start_period: 10s
 
   seq:
-    image: datalust/seq:2024.3
+    image: datalust/seq:2026.1.17526
     restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
