@@ -34,11 +34,11 @@ jobs:
         run: >
           dotnet test Hrms.sln -c Release --no-build
           --filter "FullyQualifiedName!~IntegrationTests"
-          --logger "trx;LogFileName=unit.trx" --results-directory TestResults
+          --logger GitHubActions --logger "trx;LogFileName=unit.trx" --results-directory TestResults
       - name: Integration tests (Testcontainers MySQL)
         run: >
           dotnet test tests/Hrms.Core.IntegrationTests -c Release --no-build
-          --logger "trx;LogFileName=integration.trx" --results-directory TestResults
+          --logger GitHubActions --logger "trx;LogFileName=integration.trx" --results-directory TestResults
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
