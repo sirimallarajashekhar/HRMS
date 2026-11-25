@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Diagnostics;
 using Asp.Versioning;
 using Asp.Versioning.Builder;
 using Hrms.Api;
+using Hrms.Api.Health;
 using Hrms.Core.Api;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -15,7 +17,10 @@ builder.Host.UseSerilog((context, services, logger) => logger
     .ReadFrom.Configuration(context.Configuration)
     .ReadFrom.Services(services)
     .Enrich.FromLogContext()
-    .WriteTo.Console(new RenderedCompactJsonFormatter()));
+    .WriteTo.Console(new RenderedCompactJsonFormatter())
+    .WriteTo.Conditional(
+        _ => !string.IsNullOrWhiteSpace(context.Configuration["Seq:ServerUrl"]),
+        sink => sink.Seq(context.Configuration["Seq:ServerUrl"]!, formatProvider: CultureInfo.InvariantCulture)));
 
 builder.Services.AddHrmsObservability(builder.Configuration, "hrms-api");
 builder.Services.AddSingleton(TimeProvider.System);
@@ -42,9 +47,9 @@ builder.Services.AddApiVersioning(options =>
     })
     .AddOpenApi();
 
-// Dependency checks (MySQL, Redis, RabbitMQ) are added with the infrastructure in P0.2/P0.3 using the "ready" tag.
 builder.Services.AddHealthChecks()
-    .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"]);
+    .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
+    .AddDependencyChecks(builder.Configuration);
 
 var app = builder.Build();
 
@@ -55,7 +60,7 @@ app.UseStatusCodePages();
 app.UseSerilogRequestLogging();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = check => check.Tags.Contains("live") });
-app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") || check.Tags.Contains("live") });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(DependencyHealthChecks.ReadyTag) });
 
 ApiVersionSet versionSet = app.NewApiVersionSet().HasApiVersion(new ApiVersion(1, 0)).Build();
 var v1 = app.MapGroup("/api/v{version:apiVersion}").WithApiVersionSet(versionSet);
