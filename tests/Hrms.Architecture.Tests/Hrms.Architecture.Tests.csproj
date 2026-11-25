@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+
+    <ProjectReference Include="../../src/Contracts/Hrms.Contracts/Hrms.Contracts.csproj" />
+    <ProjectReference Include="../../src/Host/Hrms.Api/Hrms.Api.csproj" />
+    <ProjectReference Include="../../src/Host/Hrms.Worker/Hrms.Worker.csproj" />
+    <ProjectReference Include="../../src/Modules/Core/Api/Hrms.Core.Api.csproj" />
+    <ProjectReference Include="../../src/Modules/Core/Application/Hrms.Core.Application.csproj" />
+    <ProjectReference Include="../../src/Modules/Core/Domain/Hrms.Core.Domain.csproj" />
+    <ProjectReference Include="../../src/Modules/Core/Infrastructure/Hrms.Core.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/Platform/Hrms.Notifications/Hrms.Notifications.csproj" />
+    <ProjectReference Include="../../src/Platform/Hrms.Policy/Hrms.Policy.csproj" />
+    <ProjectReference Include="../../src/Platform/Hrms.Workflow/Hrms.Workflow.csproj" />
+    <ProjectReference Include="../../src/SharedKernel/Hrms.SharedKernel/Hrms.SharedKernel.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NetArchTest.Rules" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>
