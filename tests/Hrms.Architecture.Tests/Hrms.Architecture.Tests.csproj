@@ -13,6 +13,7 @@
     <ProjectReference Include="../../src/Modules/Core/Domain/Hrms.Core.Domain.csproj" />
     <ProjectReference Include="../../src/Modules/Core/Infrastructure/Hrms.Core.Infrastructure.csproj" />
     <ProjectReference Include="../../src/Platform/Hrms.Notifications/Hrms.Notifications.csproj" />
+    <ProjectReference Include="../../src/Platform/Hrms.Http/Hrms.Http.csproj" />
     <ProjectReference Include="../../src/Platform/Hrms.Persistence/Hrms.Persistence.csproj" />
     <ProjectReference Include="../../src/Platform/Hrms.Policy/Hrms.Policy.csproj" />
     <ProjectReference Include="../../src/Platform/Hrms.Workflow/Hrms.Workflow.csproj" />

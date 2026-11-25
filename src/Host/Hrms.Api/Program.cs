@@ -5,6 +5,7 @@ using Asp.Versioning.Builder;
 using Hrms.Api;
 using Hrms.Api.Health;
 using Hrms.Core.Api;
+using Hrms.Http.Tenancy;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Scalar.AspNetCore;
@@ -55,6 +56,8 @@ builder.Services.AddApiVersioning(options =>
     })
     .AddOpenApi();
 
+builder.Services.AddHrmsTenancy();
+
 builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
     .AddDependencyChecks(builder.Configuration, builder.Environment);
@@ -67,8 +70,12 @@ app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseSerilogRequestLogging();
 
-app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = check => check.Tags.Contains("live") });
-app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(DependencyHealthChecks.ReadyTag) });
+// Routing first so the tenant middleware can read endpoint metadata; the tenant is resolved before any endpoint runs.
+app.UseRouting();
+app.UseHrmsTenancy();
+
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = check => check.Tags.Contains("live") }).AllowWithoutTenant();
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(DependencyHealthChecks.ReadyTag) }).AllowWithoutTenant();
 
 ApiVersionSet versionSet = app.NewApiVersionSet().HasApiVersion(new ApiVersion(1, 0)).Build();
 var v1 = app.MapGroup("/api/v{version:apiVersion}").WithApiVersionSet(versionSet);
@@ -77,10 +84,10 @@ v1.MapCoreEndpoints();
 // The API description is not served in Production until it can sit behind authorization (P0.4).
 if (!app.Environment.IsProduction())
 {
-    app.MapOpenApi().WithDocumentPerVersion();
+    app.MapOpenApi().AllowWithoutTenant().WithDocumentPerVersion();
     if (app.Environment.IsDevelopment())
     {
-        app.MapScalarApiReference();
+        app.MapScalarApiReference().AllowWithoutTenant();
     }
 }
 
