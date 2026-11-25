@@ -5,6 +5,7 @@ using Hrms.Worker;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using Hrms.Logging;
 using Serilog;
 using Serilog.Formatting.Compact;
 
@@ -20,6 +21,8 @@ builder.Services.AddSerilog((services, logger) =>
         .ReadFrom.Configuration(builder.Configuration)
         .ReadFrom.Services(services)
         .Enrich.FromLogContext()
+        // After FromLogContext so pushed properties are masked too.
+        .Enrich.With<SensitiveDataEnricher>()
         .WriteTo.Console(new RenderedCompactJsonFormatter());
 
     if (!string.IsNullOrWhiteSpace(seqServerUrl))

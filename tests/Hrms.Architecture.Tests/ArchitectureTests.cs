@@ -41,7 +41,7 @@ public class ArchitectureTests
             var result = Types.InAssembly(SolutionModel.Layer(module, "Domain"))
                 .ShouldNot().HaveDependencyOnAny(
                     $"Hrms.{module}.Application.", $"Hrms.{module}.Infrastructure.", $"Hrms.{module}.Api.",
-                    "Microsoft.AspNetCore", "Microsoft.EntityFrameworkCore", "Hrms.Persistence", "Hrms.Http")
+                    "Microsoft.AspNetCore", "Microsoft.EntityFrameworkCore", "Hrms.Persistence", "Hrms.Http", "Hrms.Logging")
                 .GetResult();
 
             result.IsSuccessful.Should().BeTrue($"{module}.Domain: {string.Join(", ", result.FailingTypeNames ?? [])}");
@@ -54,7 +54,7 @@ public class ArchitectureTests
         foreach (var module in SolutionModel.ModuleNames)
         {
             var result = Types.InAssembly(SolutionModel.Layer(module, "Application"))
-                .ShouldNot().HaveDependencyOnAny($"Hrms.{module}.Infrastructure.", $"Hrms.{module}.Api.", "Microsoft.AspNetCore", "Hrms.Http")
+                .ShouldNot().HaveDependencyOnAny($"Hrms.{module}.Infrastructure.", $"Hrms.{module}.Api.", "Microsoft.AspNetCore", "Hrms.Http", "Hrms.Persistence")
                 .GetResult();
 
             result.IsSuccessful.Should().BeTrue($"{module}.Application: {string.Join(", ", result.FailingTypeNames ?? [])}");

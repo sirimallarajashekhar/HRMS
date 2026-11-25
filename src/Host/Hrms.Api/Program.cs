@@ -11,6 +11,7 @@ using Hrms.Http.Tenancy;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Scalar.AspNetCore;
+using Hrms.Logging;
 using Serilog;
 using Serilog.Formatting.Compact;
 
@@ -22,6 +23,8 @@ builder.Host.UseSerilog((context, services, logger) =>
         .ReadFrom.Configuration(context.Configuration)
         .ReadFrom.Services(services)
         .Enrich.FromLogContext()
+        // After FromLogContext so pushed properties are masked too.
+        .Enrich.With<SensitiveDataEnricher>()
         .WriteTo.Console(new RenderedCompactJsonFormatter());
 
     // WriteTo.Conditional builds the inner sink eagerly (the predicate only filters events),

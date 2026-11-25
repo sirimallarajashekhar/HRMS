@@ -9,7 +9,7 @@ namespace Hrms.Architecture.Tests;
 /// </summary>
 public static partial class SolutionModel
 {
-    public static readonly string[] PlatformAssemblyNames = ["Hrms.Workflow", "Hrms.Policy", "Hrms.Notifications", "Hrms.Persistence", "Hrms.Http"];
+    public static readonly string[] PlatformAssemblyNames = ["Hrms.Workflow", "Hrms.Policy", "Hrms.Notifications", "Hrms.Persistence", "Hrms.Http", "Hrms.Logging"];
 
     [GeneratedRegex(@"^Hrms\.(?<module>[A-Za-z0-9]+)\.(?<layer>Domain|Application|Infrastructure|Api)$")]
     private static partial Regex ModuleAssemblyPattern();
@@ -41,7 +41,11 @@ public static partial class SolutionModel
     public static bool IsModuleAssemblyName(string name) => ModuleAssemblyPattern().IsMatch(name);
 
     /// <summary>Number of module projects on disk (src/Modules/&lt;Module&gt;/&lt;Layer&gt;/*.csproj), to catch undiscovered modules.</summary>
-    public static int ModuleProjectCountOnDisk()
+    public static int ModuleProjectCountOnDisk() =>
+        Directory.GetFiles(Path.Combine(RepoRoot(), "src", "Modules"), "*.csproj", SearchOption.AllDirectories).Length;
+
+    /// <summary>The folder that holds Hrms.sln, found by walking up from the test output directory.</summary>
+    public static string RepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Hrms.sln")))
@@ -49,11 +53,6 @@ public static partial class SolutionModel
             dir = dir.Parent;
         }
 
-        if (dir is null)
-        {
-            throw new InvalidOperationException("Could not locate Hrms.sln above the test output directory.");
-        }
-
-        return Directory.GetFiles(Path.Combine(dir.FullName, "src", "Modules"), "*.csproj", SearchOption.AllDirectories).Length;
+        return dir?.FullName ?? throw new InvalidOperationException("Could not locate Hrms.sln above the test output directory.");
     }
 }

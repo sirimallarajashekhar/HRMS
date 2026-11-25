@@ -88,6 +88,10 @@ Generic, multi-tenant HRMS for organisations with 500+ employees. Specs: docs/PR
 - Test libraries: FluentAssertions stays on 7.x (v8 needs a commercial license). Pin Microsoft.* packages to 10.0.x (11.0 does not run on net10.0).
 - EF Core exception: Microsoft.EntityFrameworkCore and .Relational stay on 9.0.x with Pomelo.EntityFrameworkCore.MySql 9.0.0 (MIT) because Pomelo has no EF Core 10 release; Oracle's MySql.EntityFrameworkCore is GPL-2.0 and adds a second driver, so it is not used. Move to EF Core 10 deliberately once Pomelo ships it (Dependabot ignores Microsoft.* major bumps).
 - Dockerfiles must COPY .editorconfig with the build props, otherwise analyzer settings differ inside the image and the build fails.
+- Tenancy: tenant-owned entities derive from TenantEntity and live in a DbContext derived from TenantDbContext, which applies the tenant filter, soft delete, audit stamping and row_version. Each needs an index that leads with tenant_id (architecture test). Hand-written SQL goes only through TenantDbConnection (must bind @TenantId; also filter is_deleted = 0). Never use IgnoreQueryFilters, EF raw SQL (FromSql, ExecuteSql, SqlQuery) or a raw MySqlConnection outside the allowlist in tests/Hrms.Architecture.Tests/TenantBypassRules.cs; the build fails if you do.
+- Tenant resolution: the X-Tenant-Id header resolver trusts the caller and is allowed only in Development (the host refuses to start otherwise). Endpoints that work without a tenant (probes, API description) must opt out with AllowWithoutTenant(); every other endpoint requires a resolved, active tenant. Every new endpoint still needs an explicit permission check from P0.4 onwards.
+- Decimals must declare precision (HasPrecision) or the model refuses to build; DateTime columns are UTC only; ids are UUIDv7 stored as binary(16). Unique-per-tenant codes use HasUniquePerTenant so soft-deleted rows release their code.
+- Logging: never log secrets or personal data. SensitiveDataEnricher masks properties by name as a safety net; it cannot catch values formatted into message text.
 - Infrastructure host ports are env-configurable in docker-compose.yml (see .env.example); .env is git-ignored.
 
 ## Commands
@@ -96,7 +100,7 @@ Generic, multi-tenant HRMS for organisations with 500+ employees. Specs: docs/PR
 - Run API: dotnet run --project src/Host/Hrms.Api
 - Local infra: cp .env.example .env && docker compose up -d --wait (add --profile app to also run API + worker in containers)
 - Web: cd web && npm start / npm test
-- Add migration: dotnet ef migrations add <Name> --project src/Modules/<Module>/Infrastructure --startup-project src/Host/Hrms.Api
+- Add migration (run `dotnet tool restore` once; the EF CLI is pinned in dotnet-tools.json): dotnet ef migrations add <Name> --project src/Modules/<Module>/Infrastructure --startup-project src/Host/Hrms.Api --output-dir Persistence/Migrations. The "model matches the latest migration" test fails if you forget.
 
 ## Working style
 - Plan first, then wait for approval before writing code.
