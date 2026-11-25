@@ -86,12 +86,14 @@ Generic, multi-tenant HRMS for organisations with 500+ employees. Specs: docs/PR
 - Layer sub-namespaces are nested (Hrms.X.Domain.Events), never siblings that start with a layer name (Hrms.X.DomainEvents): architecture tests match namespaces by prefix.
 - New module projects must be named Hrms.<Module>.(Domain|Application|Infrastructure|Api) under src/Modules/<Module>/ and referenced by tests/Hrms.Architecture.Tests so the boundary rules pick them up.
 - Test libraries: FluentAssertions stays on 7.x (v8 needs a commercial license). Pin Microsoft.* packages to 10.0.x (11.0 does not run on net10.0).
+- Dockerfiles must COPY .editorconfig with the build props, otherwise analyzer settings differ inside the image and the build fails.
+- Infrastructure host ports are env-configurable in docker-compose.yml (see .env.example); .env is git-ignored.
 
 ## Commands
 - Build: dotnet build Hrms.sln
-- Test: dotnet test Hrms.sln
+- Test: dotnet test Hrms.sln (integration tests need Docker running: Testcontainers starts MySQL 8.4)
 - Run API: dotnet run --project src/Host/Hrms.Api
-- Local infra: docker compose up -d
+- Local infra: cp .env.example .env && docker compose up -d --wait (add --profile app to also run API + worker in containers)
 - Web: cd web && npm start / npm test
 - Add migration: dotnet ef migrations add <Name> --project src/Modules/<Module>/Infrastructure --startup-project src/Host/Hrms.Api
 
