@@ -7,7 +7,7 @@ COPY src ./src
 RUN --mount=type=cache,target=/root/.nuget/packages \
     dotnet publish src/Host/Hrms.Worker/Hrms.Worker.csproj -c Release -o /app/publish
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0 AS final
+FROM mcr.microsoft.com/dotnet/runtime:11.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 USER $APP_UID
