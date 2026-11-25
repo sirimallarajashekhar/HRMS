@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+.git/
+.github/
+.vs/
+.claude/
+tests/
+docs/
+web/node_modules/
+*.md
+.env
+.env.*
+docker-compose*.yml
