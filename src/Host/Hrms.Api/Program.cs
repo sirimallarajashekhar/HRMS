@@ -49,7 +49,7 @@ builder.Services.AddApiVersioning(options =>
 
 builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
-    .AddDependencyChecks(builder.Configuration);
+    .AddDependencyChecks(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
 

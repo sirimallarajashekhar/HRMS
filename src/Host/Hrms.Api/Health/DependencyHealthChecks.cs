@@ -5,7 +5,7 @@ using StackExchange.Redis;
 
 namespace Hrms.Api.Health;
 
-/// <summary>Registers readiness checks for the infrastructure dependencies that are configured.</summary>
+/// <summary>Registers readiness checks for the infrastructure dependencies the API needs.</summary>
 public static class DependencyHealthChecks
 {
     public const string ReadyTag = "ready";
@@ -13,31 +13,39 @@ public static class DependencyHealthChecks
     private static readonly TimeSpan CheckTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// A check is registered only when its connection string is present, so the bare API and the test host
-    /// still start without infrastructure. Failure details stay in logs, never in the response body.
+    /// In Development a dependency without a connection string is skipped, so the bare API still runs.
+    /// Everywhere else a missing connection string registers a check that reports Unhealthy: readiness must
+    /// fail closed, otherwise a typo in a secret name would route traffic to an instance with no database.
+    /// Failure details stay in logs, never in the response body.
     /// </summary>
-    public static IHealthChecksBuilder AddDependencyChecks(this IHealthChecksBuilder builder, IConfiguration configuration)
+    public static IHealthChecksBuilder AddDependencyChecks(this IHealthChecksBuilder builder, IConfiguration configuration, IHostEnvironment environment)
     {
-        var mysql = configuration.GetConnectionString("Mysql");
-        if (!string.IsNullOrWhiteSpace(mysql))
-        {
-            builder.Add(new HealthCheckRegistration("mysql", new MySqlHealthCheck(mysql), HealthStatus.Unhealthy, [ReadyTag], CheckTimeout));
-        }
+        var required = !environment.IsDevelopment();
 
-        var redis = configuration.GetConnectionString("Redis");
-        if (!string.IsNullOrWhiteSpace(redis))
-        {
-            builder.Add(new HealthCheckRegistration("redis", new RedisHealthCheck(redis), HealthStatus.Unhealthy, [ReadyTag], CheckTimeout));
-        }
-
-        var rabbit = configuration.GetConnectionString("RabbitMq");
-        if (!string.IsNullOrWhiteSpace(rabbit))
-        {
-            builder.Add(new HealthCheckRegistration("rabbitmq", new AmqpTcpHealthCheck(rabbit), HealthStatus.Unhealthy, [ReadyTag], CheckTimeout));
-        }
+        Register(builder, "mysql", configuration.GetConnectionString("Mysql"), required, cs => new MySqlHealthCheck(cs));
+        Register(builder, "redis", configuration.GetConnectionString("Redis"), required, cs => new RedisHealthCheck(cs));
+        Register(builder, "rabbitmq", configuration.GetConnectionString("RabbitMq"), required, cs => new AmqpTcpHealthCheck(cs));
 
         return builder;
     }
+
+    private static void Register(IHealthChecksBuilder builder, string name, string? connectionString, bool required, Func<string, IHealthCheck> create)
+    {
+        if (!string.IsNullOrWhiteSpace(connectionString))
+        {
+            builder.Add(new HealthCheckRegistration(name, create(connectionString), HealthStatus.Unhealthy, [ReadyTag], CheckTimeout));
+        }
+        else if (required)
+        {
+            builder.Add(new HealthCheckRegistration(name, new NotConfiguredHealthCheck(name), HealthStatus.Unhealthy, [ReadyTag], CheckTimeout));
+        }
+    }
+}
+
+internal sealed class NotConfiguredHealthCheck(string name) : IHealthCheck
+{
+    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default) =>
+        Task.FromResult(HealthCheckResult.Unhealthy($"{name} connection string is not configured."));
 }
 
 internal sealed class MySqlHealthCheck(string connectionString) : IHealthCheck

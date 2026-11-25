@@ -38,4 +38,26 @@ public class ReadinessTests(WebApplicationFactory<Program> factory) : IClassFixt
         var body = await response.Content.ReadAsStringAsync();
         body.Should().Be("Unhealthy").And.NotContain("127.0.0.1");
     }
+
+    [Fact]
+    public async Task Ready_InProductionWithNoDependenciesConfigured_FailsClosedWith503()
+    {
+        using var production = factory.WithWebHostBuilder(builder => builder.UseEnvironment("Production"));
+        using var client = production.CreateClient();
+
+        var response = await client.GetAsync("/health/ready");
+
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+    }
+
+    [Fact]
+    public async Task Ready_InDevelopmentWithNoDependenciesConfigured_Returns200()
+    {
+        using var development = factory.WithWebHostBuilder(builder => builder.UseEnvironment("Development"));
+        using var client = development.CreateClient();
+
+        var response = await client.GetAsync("/health/ready");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
 }
