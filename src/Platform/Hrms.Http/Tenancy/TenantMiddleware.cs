@@ -20,7 +20,6 @@ public sealed partial class TenantMiddleware(RequestDelegate next, ILogger<Tenan
     public async Task InvokeAsync(
         HttpContext context,
         ITenantResolver resolver,
-        ITenantDirectory directory,
         TenantContext tenantContext,
         IDiagnosticContext diagnostics,
         IProblemDetailsService problems)
@@ -43,6 +42,8 @@ public sealed partial class TenantMiddleware(RequestDelegate next, ILogger<Tenan
         }
 
         // Unknown and suspended tenants get the same answer, so callers cannot probe which tenants exist.
+        // Resolved here, not injected into InvokeAsync, so endpoints that opt out never touch the database.
+        var directory = context.RequestServices.GetRequiredService<ITenantDirectory>();
         if (!await directory.IsActiveAsync(resolution.TenantId.Value, context.RequestAborted))
         {
             await RejectAsync(context, problems, StatusCodes.Status403Forbidden, ForbiddenCode, "This tenant cannot be used.");

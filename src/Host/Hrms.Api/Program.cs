@@ -5,6 +5,8 @@ using Asp.Versioning.Builder;
 using Hrms.Api;
 using Hrms.Api.Health;
 using Hrms.Core.Api;
+using Hrms.Core.Infrastructure;
+using Hrms.Persistence;
 using Hrms.Http.Tenancy;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -56,7 +58,11 @@ builder.Services.AddApiVersioning(options =>
     })
     .AddOpenApi();
 
+var mysqlConnectionString = builder.Configuration.GetConnectionString("Mysql");
 builder.Services.AddHrmsTenancy();
+builder.Services.AddHrmsPersistence(mysqlConnectionString);
+// After AddHrmsTenancy so the real tenant directory replaces its deny-all default.
+builder.Services.AddCoreInfrastructure(mysqlConnectionString);
 
 builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])

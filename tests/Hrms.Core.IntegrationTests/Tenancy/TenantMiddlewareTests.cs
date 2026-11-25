@@ -45,7 +45,8 @@ public class TenantMiddlewareTests
         string environment = "Development",
         bool headerResolver = true,
         bool tenantIsActive = true,
-        CollectingSink? sink = null)
+        CollectingSink? sink = null,
+        Func<IServiceProvider, ITenantDirectory>? directory = null)
     {
         var logger = new LoggerConfiguration()
             .Enrich.FromLogContext()
@@ -66,7 +67,7 @@ public class TenantMiddlewareTests
                     services.AddProblemDetails();
                     services.AddHrmsTenancy();
                     services.AddSingleton<IDiagnosticContext>(new DiagnosticContext(logger));
-                    services.AddScoped<ITenantDirectory>(_ => new FakeDirectory(tenantIsActive));
+                    services.AddScoped(directory ?? (_ => new FakeDirectory(tenantIsActive)));
                 })
                 .Configure(app =>
                 {
@@ -204,6 +205,17 @@ public class TenantMiddlewareTests
     public async Task Endpoint_MarkedAllowWithoutTenant_WorksWithoutOne()
     {
         using var host = await StartAsync();
+
+        var response = await host.GetTestClient().SendAsync(Get("/open"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Endpoint_MarkedAllowWithoutTenant_NeverConstructsTheTenantDirectory()
+    {
+        // A host with no database must still serve ping and health: the directory (which needs the database) is resolved lazily.
+        using var host = await StartAsync(directory: _ => throw new InvalidOperationException("The directory must not be built."));
 
         var response = await host.GetTestClient().SendAsync(Get("/open"));
 
