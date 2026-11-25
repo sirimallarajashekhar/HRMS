@@ -86,7 +86,7 @@ services:
       start_period: 10s
 
   seq:
-    image: datalust/seq:2024.3
+    image: datalust/seq:2026.1.17526
     restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
