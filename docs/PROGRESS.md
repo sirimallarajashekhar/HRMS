@@ -24,3 +24,11 @@ Append one entry per finished step: date, step id, what was built, follow-ups.
 - Docker: add a separate restore layer for faster cached CI builds, pin base-image digests, add `HEALTHCHECK`/read-only root filesystem; add Trivy image scanning to CI.
 - CI: a `web/` job once the Angular app exists; Redis and RabbitMQ Testcontainers tests when they become real dependencies; replace the tautological container charset test with one that guards the schema defaults the app relies on.
 - Config: Seq API key support (`Seq:ApiKey`); `innodb_redo_log_capacity` instead of the deprecated `--innodb-log-file-size`; Seq healthcheck; group Dependabot NuGet updates; mask PII in logs before it is sent to Seq (P0.3).
+
+## 2026-11-25 – P0.2 CI repair (PRs #15 and #18)
+**Built:** First real CI run exposed two problems, both now fixed and green on `main`. (1) #15: Dependabot merges had bumped base images, MySQL, Redis and FluentAssertions off the pinned stack; restored net10 base images, MySQL 8.4 and FluentAssertions 7.x, and added Dependabot guardrails. (2) #18: every API integration test crashed at host startup with `ArgumentNullException (serverUrl)`. `WriteTo.Conditional` builds the inner Seq sink eagerly (the predicate only filters events), so a missing `Seq:ServerUrl` threw. Seq is now added with a plain `if` in Hrms.Api and Hrms.Worker, and `LoggingStartupTests` covers empty, whitespace and unreachable URLs (verified to fail without the fix). 40 tests pass; CI `build`, `dependency-scan`, `secret-scan` and both `docker-images` jobs green on #18.
+**Learned:** A machine-wide `Seq__ServerUrl` (and `ConnectionStrings__Redis`) in the developer shell masked the bug locally and made two readiness tests fail; run tests with those unset to match CI. #15 was merged with a red `build` because `main` has no branch protection.
+**Follow-ups:**
+- Repository owner: enable branch protection on `main` requiring `build` (critical, it is what let a red PR merge); scope the machine-wide Seq and Redis variables to their own project.
+- Not confirmed: a CI run on `main` after the #18 merge (the green run was on the PR branch).
+- Consider an integration-test base class that clears `Seq__*` and `ConnectionStrings__*` environment variables so local runs match CI.
