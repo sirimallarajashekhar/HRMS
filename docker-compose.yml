@@ -22,7 +22,7 @@ services:
       - --transaction-isolation=READ-COMMITTED
       - --binlog-expire-logs-seconds=86400
     ports:
-      - "${MYSQL_PORT:-3306}:3306"
+      - "127.0.0.1:${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
@@ -39,7 +39,7 @@ services:
     environment:
       REDISCLI_AUTH: ${REDIS_PASSWORD}
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -55,8 +55,8 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-hrms}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?copy .env.example to .env}
     ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "${RABBITMQ_UI_PORT:-15672}:15672" # management UI
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${RABBITMQ_UI_PORT:-15672}:15672" # management UI
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
@@ -68,14 +68,14 @@ services:
 
   objectstore:
     # S3-compatible store for local development (MinIO stopped publishing public images). Production uses real S3 behind IFileStorage.
-    image: rustfs/rustfs:latest
+    image: rustfs/rustfs:1.0.6
     restart: unless-stopped
     environment:
       RUSTFS_ACCESS_KEY: ${OBJECTSTORE_ACCESS_KEY:-hrmsstore}
       RUSTFS_SECRET_KEY: ${OBJECTSTORE_SECRET_KEY:?copy .env.example to .env}
     ports:
-      - "${OBJECTSTORE_PORT:-9000}:9000" # S3 API
-      - "${OBJECTSTORE_CONSOLE_PORT:-9001}:9001" # console
+      - "127.0.0.1:${OBJECTSTORE_PORT:-9000}:9000" # S3 API
+      - "127.0.0.1:${OBJECTSTORE_CONSOLE_PORT:-9001}:9001" # console
     volumes:
       - objectstore-data:/data
     healthcheck:
@@ -92,8 +92,8 @@ services:
       ACCEPT_EULA: "Y"
       SEQ_FIRSTRUN_NOAUTHENTICATION: "true" # local development only
     ports:
-      - "${SEQ_INGEST_PORT:-5341}:5341" # ingestion
-      - "${SEQ_UI_PORT:-8081}:80"   # UI
+      - "127.0.0.1:${SEQ_INGEST_PORT:-5341}:5341" # ingestion
+      - "127.0.0.1:${SEQ_UI_PORT:-8081}:80"   # UI
     volumes:
       - seq-data:/data
 
@@ -109,7 +109,7 @@ services:
       ConnectionStrings__RabbitMq: "amqp://${RABBITMQ_USER:-hrms}:${RABBITMQ_PASSWORD}@rabbitmq:5672"
       Seq__ServerUrl: http://seq:5341
     ports:
-      - "${API_PORT:-8080}:8080"
+      - "127.0.0.1:${API_PORT:-8080}:8080"
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }

@@ -11,6 +11,9 @@ updates:
   - package-ecosystem: docker
     directories: ["/src/Host/Hrms.Api", "/src/Host/Hrms.Worker"]
     schedule: { interval: weekly }
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule: { interval: weekly }
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
