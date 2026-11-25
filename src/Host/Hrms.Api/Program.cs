@@ -13,14 +13,22 @@ using Serilog.Formatting.Compact;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host.UseSerilog((context, services, logger) => logger
-    .ReadFrom.Configuration(context.Configuration)
-    .ReadFrom.Services(services)
-    .Enrich.FromLogContext()
-    .WriteTo.Console(new RenderedCompactJsonFormatter())
-    .WriteTo.Conditional(
-        _ => !string.IsNullOrWhiteSpace(context.Configuration["Seq:ServerUrl"]),
-        sink => sink.Seq(context.Configuration["Seq:ServerUrl"]!, formatProvider: CultureInfo.InvariantCulture)));
+builder.Host.UseSerilog((context, services, logger) =>
+{
+    logger
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext()
+        .WriteTo.Console(new RenderedCompactJsonFormatter());
+
+    // WriteTo.Conditional builds the inner sink eagerly (the predicate only filters events),
+    // so the Seq sink must be added with a plain `if` or a missing URL throws at startup.
+    var seqServerUrl = context.Configuration["Seq:ServerUrl"];
+    if (!string.IsNullOrWhiteSpace(seqServerUrl))
+    {
+        logger.WriteTo.Seq(seqServerUrl, formatProvider: CultureInfo.InvariantCulture);
+    }
+});
 
 builder.Services.AddHrmsObservability(builder.Configuration, "hrms-api");
 builder.Services.AddSingleton(TimeProvider.System);
