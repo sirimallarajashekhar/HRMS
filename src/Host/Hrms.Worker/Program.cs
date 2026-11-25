@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry;
 using Hrms.Worker;
@@ -13,7 +14,10 @@ builder.Services.AddSerilog((services, logger) => logger
     .ReadFrom.Configuration(builder.Configuration)
     .ReadFrom.Services(services)
     .Enrich.FromLogContext()
-    .WriteTo.Console(new RenderedCompactJsonFormatter()));
+    .WriteTo.Console(new RenderedCompactJsonFormatter())
+    .WriteTo.Conditional(
+        _ => !string.IsNullOrWhiteSpace(builder.Configuration["Seq:ServerUrl"]),
+        sink => sink.Seq(builder.Configuration["Seq:ServerUrl"]!, formatProvider: CultureInfo.InvariantCulture)));
 
 var otel = builder.Services.AddOpenTelemetry()
     .ConfigureResource(r => r.AddService("hrms-worker"))

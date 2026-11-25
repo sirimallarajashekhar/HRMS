@@ -1,0 +1,137 @@
+# Skeleton: builds and publishes images, then promotes through dev -> staging -> prod.
+# Deploy steps are placeholders until the hosting platform is chosen.
+#
+# ONE-TIME SETUP (Settings -> Environments), otherwise GitHub creates unprotected environments on first use:
+#   1. Create the environments "dev", "staging" and "prod".
+#   2. On "prod" (and ideally "staging") add Required reviewers: that is the manual approval gate.
+#   3. Create DEPLOY_TARGET and DEPLOY_TOKEN as environment secrets per environment, not repository secrets.
+#   4. Every deployed container needs AllowedHosts set (env var AllowedHosts=hostname1;hostname2),
+#      or the API answers 400 to every request, including health probes.
+name: CD
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image tag to publish and deploy: vMAJOR.MINOR.PATCH[-suffix] (defaults to the 12-char commit SHA)"
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+
+# Third-party actions are pinned to commit SHAs (the comment is the human-readable version).
+jobs:
+  publish:
+    name: publish-images
+    # Only code on main, or a release tag, may be published.
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      checks: read
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: Require the commit to be on main and CI to be green
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_SHA is not on main; refusing to publish."
+            exit 1
+          fi
+          passed=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs" \
+            --jq '[.check_runs[] | select(.name == "build" and .conclusion == "success")] | length')
+          if [ "$passed" -lt 1 ]; then
+            echo "::error::The CI 'build' check has not passed for $GITHUB_SHA; refusing to publish."
+            exit 1
+          fi
+      - id: meta
+        name: Resolve and validate the version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          version="$INPUT_VERSION"
+          if [ -z "$version" ]; then
+            if [ "$GITHUB_REF_TYPE" = "tag" ]; then version="$GITHUB_REF_NAME"; else version="${GITHUB_SHA::12}"; fi
+          fi
+          # Strict allow-list: also blocks shell metacharacters and mutable tags such as "latest".
+          if ! printf '%s' "$version" | grep -Eq '^(v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?|[0-9a-f]{12})$'; then
+            echo "::error::Invalid version '$version'. Use vMAJOR.MINOR.PATCH[-suffix] or a 12-char commit SHA."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "repo=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push hrms-api
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: src/Host/Hrms.Api/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ steps.meta.outputs.repo }}/hrms-api:${{ steps.meta.outputs.version }}
+      - name: Push hrms-worker
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: src/Host/Hrms.Worker/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ steps.meta.outputs.repo }}/hrms-worker:${{ steps.meta.outputs.version }}
+
+  deploy-dev:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: dev
+    concurrency: deploy-dev
+    steps:
+      - name: Deploy to dev
+        env:
+          VERSION: ${{ needs.publish.outputs.version }}
+          DEPLOY_TARGET: ${{ secrets.DEPLOY_TARGET }} # placeholder (environment secret)
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}   # placeholder (environment secret)
+        run: echo "TODO - deploy $VERSION to dev (platform not chosen yet)"
+
+  deploy-staging:
+    needs: [publish, deploy-dev]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    concurrency: deploy-staging
+    steps:
+      - name: Deploy to staging
+        env:
+          VERSION: ${{ needs.publish.outputs.version }}
+          DEPLOY_TARGET: ${{ secrets.DEPLOY_TARGET }}
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+        run: echo "TODO - deploy $VERSION to staging (platform not chosen yet)"
+
+  deploy-prod:
+    needs: [publish, deploy-staging]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: prod # required reviewers on this environment = manual approval gate (see one-time setup above)
+    concurrency: deploy-prod
+    steps:
+      - name: Deploy to prod
+        env:
+          VERSION: ${{ needs.publish.outputs.version }}
+          DEPLOY_TARGET: ${{ secrets.DEPLOY_TARGET }}
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+        run: echo "TODO - deploy $VERSION to prod (platform not chosen yet)"
