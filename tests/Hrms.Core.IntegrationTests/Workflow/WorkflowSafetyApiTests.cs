@@ -1,5 +1,6 @@
 using System.Net;
 using FluentAssertions;
+using Hrms.Contracts;
 using Hrms.Contracts.Workflow;
 using Hrms.Core.IntegrationTests.Employee;
 using Hrms.Core.IntegrationTests.Persistence;
@@ -101,6 +102,42 @@ public class WorkflowSafetyApiTests(EmployeeApiFixture fixture) : WorkflowApiTes
         await ExpectAsync(
             await DelegateAsync(await AdminAsync(), await AdminUserIdAsync(), delegator: boss.UserId),
             HttpStatusCode.Forbidden, "workflow.delegation.self_grant");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ADelegationSetUpBySomeoneBarred_DoesNotLetThemChooseWhoApprovesTheirRequest(bool barredAsRequester)
+    {
+        await PublishAsync(TestWorkflows.Leave, Stage(Manager()));
+        var line = await LineAsync();
+        var friend = await PersonAsync();
+        // An HR user who may manage delegations, and who either raised the request or is the person it is about.
+        var officer = await PersonAsync(line.Lead);
+        var role = await RoleCodeOfAsync((await UserAsync(ScopeType.Tenant, null, Permissions.Workflow.DelegationManage)).UserId);
+        await Host.GrantRoleAtAsync(Acme.Tenant.TenantId, officer.UserId, role, ScopeType.Tenant, null);
+        var (affected, affectedEntity) = barredAsRequester
+            ? await StartAsync(line.Worker, requester: officer.UserId)
+            : await StartAsync(officer, requester: line.Worker.UserId);
+        var (unrelated, _) = await StartAsync(line.Worker);
+        var affectedTask = await RequireTaskAsync(line.Lead.Token, affected);
+        using (var granted = await DelegateAsync(officer.Token, friend.UserId, delegator: line.Lead.UserId))
+        {
+            granted.StatusCode.Should().Be(HttpStatusCode.Created, await granted.Content.ReadAsStringAsync());
+        }
+
+        (await CanDecideAsync(friend.UserId, affectedEntity)).Should().BeFalse();
+        using var detail = await GetAsync($"/workflow/tasks/{affectedTask}", friend.Token);
+        detail.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        await ExpectAsync(await ActAsync(friend.Token, affectedTask, "approve"), HttpStatusCode.NotFound, "workflow.task.not_found");
+        if (barredAsRequester)
+        {
+            (await InboxTaskAsync(friend.Token, affected)).Should().BeNull();
+        }
+
+        (await StatusAsync(affected)).Should().Be("pending");
+        await DecideAsync(friend, unrelated);
+        await DecideAsync(line.Lead, affected);
     }
 
     [Fact]

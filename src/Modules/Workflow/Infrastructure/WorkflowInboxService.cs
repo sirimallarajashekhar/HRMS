@@ -51,6 +51,7 @@ internal sealed class WorkflowInboxService(
                                          || db.Delegations.Any(d => d.DelegateUserId == userId
                                                                     && d.DelegatorUserId == r.task.AssigneeUserId
                                                                     && d.RevokedAt == null && d.StartsOn <= today && d.EndsOn >= today
+                                                                    && (d.CreatedBy == null || d.CreatedBy == d.DelegatorUserId || d.CreatedBy != r.instance.RequesterUserId)
                                                                     && (d.WorkflowKey == string.Empty || d.WorkflowKey == r.instance.WorkflowKey))));
         }
 
@@ -83,7 +84,8 @@ internal sealed class WorkflowInboxService(
         var visible = task.DecidedByUserId == userId || task.AssigneeUserId == userId;
         if (!visible && task.Status == WorkflowTaskStatus.Pending && !Subject(instance).Bars(account))
         {
-            var delegations = await access.DelegationsToAsync(userId, engine.Today, cancellationToken);
+            var delegations = await access.HonouredForAsync(
+                await access.DelegationsToAsync(userId, engine.Today, cancellationToken), Subject(instance), cancellationToken);
             visible = WorkflowAccess.Holds(userId, delegations, task, instance.WorkflowKey);
         }
 
@@ -128,7 +130,8 @@ internal sealed class WorkflowInboxService(
         }
 
         var instance = workflow.Instance;
-        var delegations = await access.DelegationsToAsync(userId, engine.Today, cancellationToken);
+        var delegations = await access.HonouredForAsync(
+            await access.DelegationsToAsync(userId, engine.Today, cancellationToken), workflow.Subject, cancellationToken);
         if (!WorkflowAccess.Holds(userId, delegations, task, instance.WorkflowKey))
         {
             // The person who decided it as a delegate may learn it is closed; anyone else learns nothing.
@@ -305,7 +308,8 @@ internal sealed class WorkflowInboxService(
             return true;
         }
 
-        var delegations = await access.DelegationsToAsync(userId, engine.Today, cancellationToken);
+        var delegations = await access.HonouredForAsync(
+            await access.DelegationsToAsync(userId, engine.Today, cancellationToken), Subject(instance), cancellationToken);
         if (delegations.Count == 0)
         {
             return false;

@@ -43,6 +43,34 @@ internal sealed class WorkflowAccess(WorkflowDbContext db, IApproverDirectory di
         return delegations.Where(d => active.Contains(d.DelegatorUserId)).ToList();
     }
 
+    /// <summary>
+    /// Leaves out delegations that someone barred from this request set up for another person: otherwise a requester, or the person a
+    /// request is about, with the right to manage delegations could choose who approves it. A delegation people set up for
+    /// themselves always counts, and a left-out one still works for other requests.
+    /// </summary>
+    public async Task<IReadOnlyList<Delegation>> HonouredForAsync(
+        IReadOnlyList<Delegation> delegations, ApprovalSubject subject, CancellationToken cancellationToken)
+    {
+        var arrangers = delegations
+            .Where(d => d.CreatedBy is { } creator && creator != d.DelegatorUserId)
+            .Select(d => d.CreatedBy!.Value) // not null: filtered on the line above
+            .Distinct()
+            .ToList();
+        if (arrangers.Count == 0)
+        {
+            return delegations;
+        }
+
+        var barred = (await directory.GetAccountsAsync(arrangers, cancellationToken))
+            .Where(subject.Bars)
+            .Select(a => a.UserId)
+            .Append(subject.RequesterUserId)
+            .ToHashSet();
+        return delegations
+            .Where(d => d.CreatedBy is not { } creator || creator == d.DelegatorUserId || !barred.Contains(creator))
+            .ToList();
+    }
+
     /// <summary>Whether the task is the user's, or one they hold by delegation. Says nothing about whether they are barred.</summary>
     public static bool Holds(Guid userId, IReadOnlyList<Delegation> delegations, WorkflowTask task, string workflowKey) =>
         task.AssigneeUserId == userId || delegations.Any(d => d.DelegatorUserId == task.AssigneeUserId && d.Covers(workflowKey));

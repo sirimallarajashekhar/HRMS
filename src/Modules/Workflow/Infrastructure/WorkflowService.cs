@@ -156,7 +156,10 @@ internal sealed class WorkflowService(
             return false;
         }
 
-        var delegations = await access.DelegationsToAsync(userId, engine.Today, cancellationToken);
+        var delegations = await access.HonouredForAsync(
+            await access.DelegationsToAsync(userId, engine.Today, cancellationToken),
+            new ApprovalSubject(instance.SubjectEmployeeId, instance.RequesterUserId),
+            cancellationToken);
         return tasks.Any(t => t.Status == WorkflowTaskStatus.Pending && WorkflowAccess.Holds(userId, delegations, t, workflowKey));
     }
 
