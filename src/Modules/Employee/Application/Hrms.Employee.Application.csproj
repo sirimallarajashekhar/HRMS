@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Domain/Hrms.Employee.Domain.csproj" />
+    <ProjectReference Include="../../../SharedKernel/Hrms.SharedKernel/Hrms.SharedKernel.csproj" />
+    <ProjectReference Include="../../../Contracts/Hrms.Contracts/Hrms.Contracts.csproj" />
+  </ItemGroup>
+</Project>

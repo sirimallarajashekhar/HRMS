@@ -7,7 +7,8 @@ COPY src ./src
 RUN --mount=type=cache,target=/root/.nuget/packages \
     dotnet publish src/Host/Hrms.Worker/Hrms.Worker.csproj -c Release -o /app/publish
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0 AS final
+# The worker uses the shared persistence library, which depends on the ASP.NET Core shared framework, so it needs the aspnet runtime image.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 USER $APP_UID

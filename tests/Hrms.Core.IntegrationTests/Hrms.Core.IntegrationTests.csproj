@@ -4,6 +4,10 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/Modules/Employee/Api/Hrms.Employee.Api.csproj" />
+    <ProjectReference Include="../../src/Modules/Employee/Infrastructure/Hrms.Employee.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/Modules/Employee/Application/Hrms.Employee.Application.csproj" />
+    <ProjectReference Include="../../src/Modules/Employee/Domain/Hrms.Employee.Domain.csproj" />
     <ProjectReference Include="../../src/Host/Hrms.Api/Hrms.Api.csproj" />
     <ProjectReference Include="../../src/Contracts/Hrms.Contracts/Hrms.Contracts.csproj" />
     <ProjectReference Include="../../src/Modules/Core/Domain/Hrms.Core.Domain.csproj" />

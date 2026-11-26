@@ -6,6 +6,7 @@ public static class MasterKinds
     public const string OrgUnitType = "org_unit_type";
     public const string OrgUnit = "org_unit";
     public const string Location = "location";
+    public const string LegalEntity = "legal_entity";
     public const string Grade = "grade";
     public const string Designation = "designation";
     public const string CostCentre = "cost_centre";

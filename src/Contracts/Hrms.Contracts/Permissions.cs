@@ -56,6 +56,37 @@ public static class Permissions
         ];
     }
 
+    public static class Employee
+    {
+        public const string EmployeeView = "employee.employee.view";
+        public const string EmployeeManage = "employee.employee.manage";
+        public const string JobManage = "employee.job.manage";
+        public const string PersonalView = "employee.personal.view";
+        public const string PersonalManage = "employee.personal.manage";
+        public const string SeparationManage = "employee.separation.manage";
+        public const string StatutoryIdView = "employee.statutory_id.view";
+        public const string StatutoryIdManage = "employee.statutory_id.manage";
+        public const string DocumentView = "employee.document.view";
+        public const string DocumentManage = "employee.document.manage";
+        public const string DeviceView = "employee.device.view";
+        public const string DeviceManage = "employee.device.manage";
+        public const string ConsentView = "employee.consent.view";
+        public const string ConsentManage = "employee.consent.manage";
+        public const string CodeRuleManage = "employee.code_rule.manage";
+
+        /// <summary>Read access to the people data an auditor or payroll administrator may see (sensitive values stay masked without identity.sensitive.view).</summary>
+        public static readonly IReadOnlyList<string> ReadAll =
+        [
+            EmployeeView, PersonalView, StatutoryIdView, DocumentView, DeviceView, ConsentView,
+        ];
+
+        /// <summary>Everything HR administration may do with employees.</summary>
+        public static readonly IReadOnlyList<string> ManageAll =
+        [
+            EmployeeManage, JobManage, PersonalManage, SeparationManage, StatutoryIdManage, DocumentManage, DeviceManage, ConsentManage, CodeRuleManage,
+        ];
+    }
+
     /// <summary>Every code in the catalogue, discovered from the nested classes' constants.</summary>
     public static IReadOnlySet<string> All { get; } = typeof(Permissions)
         .GetNestedTypes(BindingFlags.Public | BindingFlags.Static)

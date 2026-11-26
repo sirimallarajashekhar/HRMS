@@ -65,6 +65,9 @@ public sealed partial class UserAccount : TenantEntity
     /// <summary>The employee this account belongs to, once the employee module exists (no foreign key across modules).</summary>
     public Guid? EmployeeId { get; private set; }
 
+    /// <summary>Links the account to an employee record (or unlinks it with null). The caller has already checked the employee exists.</summary>
+    public void LinkEmployee(Guid? employeeId) => EmployeeId = employeeId;
+
     /// <summary>True once the user has proved they hold the authenticator; from then on every sign-in needs a code.</summary>
     public bool MfaEnabled { get; private set; }
 
