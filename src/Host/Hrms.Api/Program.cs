@@ -13,6 +13,7 @@ using Hrms.Employee.Infrastructure;
 using Hrms.Identity.Api;
 using Hrms.Identity.Infrastructure;
 using Hrms.Persistence;
+using Hrms.Workflow.Infrastructure;
 using Hrms.Http.Authorization;
 using Hrms.Http.Tenancy;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -75,6 +76,7 @@ builder.Services.AddHrmsPersistence(mysqlConnectionString);
 builder.Services.AddCoreInfrastructure(mysqlConnectionString);
 builder.Services.AddIdentityInfrastructure(mysqlConnectionString);
 builder.Services.AddEmployeeInfrastructure(mysqlConnectionString);
+builder.Services.AddWorkflowInfrastructure(mysqlConnectionString);
 builder.Services.AddIdentityServer(builder.Configuration, builder.Environment);
 
 // Deny by default. Real JWT authentication replaces the placeholder scheme when the token server is wired in.

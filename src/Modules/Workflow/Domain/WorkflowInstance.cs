@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Hrms.Contracts.Workflow;
 using Hrms.SharedKernel;
 
@@ -19,13 +21,13 @@ public sealed class WorkflowInstance : TenantEntity
         WorkflowKey = workflowKey;
         EntityType = entityType;
         EntityId = entityId;
-        PayloadJson = string.Empty;
+        PayloadJson = StartFingerprint = string.Empty;
     }
 
     /// <summary>For the persistence layer only.</summary>
     private WorkflowInstance()
     {
-        WorkflowKey = EntityType = PayloadJson = string.Empty;
+        WorkflowKey = EntityType = PayloadJson = StartFingerprint = string.Empty;
     }
 
     public Guid DefinitionId { get; private set; }
@@ -57,6 +59,15 @@ public sealed class WorkflowInstance : TenantEntity
 
     public DateTime? CompletedAt { get; private set; }
 
+    /// <summary>
+    /// A hash of what the first start asked for. A repeated start must match it: otherwise changed values could ride on an approval
+    /// that was given for the old ones.
+    /// </summary>
+    public string StartFingerprint { get; private set; }
+
+    /// <summary>The number of events written to the outbox, which numbers them so they are delivered in order.</summary>
+    public int EventCount { get; private set; }
+
     /// <summary>The number of actions recorded so far.</summary>
     public int ActionCount { get; private set; }
 
@@ -77,10 +88,16 @@ public sealed class WorkflowInstance : TenantEntity
             SubjectEmployeeId = subjectEmployeeId,
             RequesterUserId = requesterUserId,
             PayloadJson = payloadJson,
+            StartFingerprint = Fingerprint(subjectEmployeeId, requesterUserId, payloadJson),
             Status = WorkflowStatus.Pending,
             Round = 1,
         };
     }
+
+    public static string Fingerprint(Guid subjectEmployeeId, Guid requesterUserId, string payloadJson) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{subjectEmployeeId:N}|{requesterUserId:N}|{payloadJson}")));
+
+    public int NextEventSequence() => ++EventCount;
 
     /// <summary>Notes that something happened and returns the log entry for it.</summary>
     public WorkflowActionLog Record(

@@ -5,6 +5,8 @@ using Hrms.Identity.Infrastructure;
 using Hrms.Identity.Infrastructure.Persistence;
 using Hrms.Persistence;
 using Hrms.SharedKernel;
+using Hrms.Workflow.Infrastructure;
+using Hrms.Workflow.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace Hrms.Architecture.Tests;
@@ -145,6 +147,35 @@ public class TenantRulesTests
         unfiltered.Where(type => type.Name != "PermissionDefinition" && type.Namespace != "OpenIddict.EntityFrameworkCore.Models")
             .Should().BeEmpty();
         unfiltered.Count(type => type.Namespace == "OpenIddict.EntityFrameworkCore.Models").Should().Be(4);
+    }
+
+    private static WorkflowDbContext WorkflowContext()
+    {
+        var options = (DbContextOptions<WorkflowDbContext>)WorkflowInfrastructureExtensions
+            .UseWorkflowMySql(new DbContextOptionsBuilder<WorkflowDbContext>(), "Server=127.0.0.1;Database=unused;User ID=x;Password=x")
+            .Options;
+        return new WorkflowDbContext(options, new TenantContext(), new SystemActorContext(), TimeProvider.System);
+    }
+
+    [Fact]
+    public void WorkflowModel_EveryTenantEntityIsFilteredAndIndexedWithTenantIdFirst()
+    {
+        using var context = WorkflowContext();
+
+        TenantModelRule.FindViolations(context.Model).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void WorkflowModel_MapsEveryTenantEntity_AndHasNoUnfilteredOne()
+    {
+        using var context = WorkflowContext();
+        var declared = SolutionModel.Layer("Workflow", "Domain").GetTypes()
+            .Where(t => !t.IsAbstract && t.IsAssignableTo(typeof(TenantEntity)))
+            .ToArray();
+
+        declared.Should().NotBeEmpty();
+        declared.Where(t => context.Model.FindEntityType(t) is null).Should().BeEmpty();
+        context.Model.GetEntityTypes().Where(e => !e.ClrType.IsAssignableTo(typeof(TenantEntity))).Should().BeEmpty();
     }
 
     private sealed class Unindexed : TenantEntity;
