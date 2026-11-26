@@ -7,6 +7,7 @@ using Hrms.Api.Health;
 using Hrms.Core.Api;
 using Hrms.Core.Infrastructure;
 using Hrms.Persistence;
+using Hrms.Http.Authorization;
 using Hrms.Http.Tenancy;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -67,6 +68,10 @@ builder.Services.AddHrmsPersistence(mysqlConnectionString);
 // After AddHrmsTenancy so the real tenant directory replaces its deny-all default.
 builder.Services.AddCoreInfrastructure(mysqlConnectionString);
 
+// Deny by default. Real JWT authentication replaces the placeholder scheme when the token server is wired in.
+builder.Services.AddAuthentication(NoAuthenticationHandler.SchemeName).AddHrmsNoAuthentication();
+builder.Services.AddHrmsAuthorization();
+
 builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
     .AddDependencyChecks(builder.Configuration, builder.Environment);
@@ -81,10 +86,13 @@ app.UseSerilogRequestLogging();
 
 // Routing first so the tenant middleware can read endpoint metadata; the tenant is resolved before any endpoint runs.
 app.UseRouting();
+// Authentication first (the tenant can come from the token), then tenancy, then authorization, which needs both.
+app.UseAuthentication();
 app.UseHrmsTenancy();
+app.UseAuthorization();
 
-app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = check => check.Tags.Contains("live") }).AllowWithoutTenant();
-app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(DependencyHealthChecks.ReadyTag) }).AllowWithoutTenant();
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = check => check.Tags.Contains("live") }).AllowWithoutTenant().AllowAnonymous();
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(DependencyHealthChecks.ReadyTag) }).AllowWithoutTenant().AllowAnonymous();
 
 ApiVersionSet versionSet = app.NewApiVersionSet().HasApiVersion(new ApiVersion(1, 0)).Build();
 var v1 = app.MapGroup("/api/v{version:apiVersion}").WithApiVersionSet(versionSet);
@@ -93,10 +101,10 @@ v1.MapCoreEndpoints();
 // The API description is not served in Production until it can sit behind authorization (P0.4).
 if (!app.Environment.IsProduction())
 {
-    app.MapOpenApi().AllowWithoutTenant().WithDocumentPerVersion();
+    app.MapOpenApi().AllowWithoutTenant().AllowAnonymous().WithDocumentPerVersion();
     if (app.Environment.IsDevelopment())
     {
-        app.MapScalarApiReference().AllowWithoutTenant();
+        app.MapScalarApiReference().AllowWithoutTenant().AllowAnonymous();
     }
 }
 
