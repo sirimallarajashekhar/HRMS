@@ -25,6 +25,35 @@ public static class Permissions
     {
         public const string LegalEntityView = "core.legal_entity.view";
         public const string LegalEntityManage = "core.legal_entity.manage";
+
+        public const string OrgUnitTypeView = "core.org_unit_type.view";
+        public const string OrgUnitTypeManage = "core.org_unit_type.manage";
+        public const string OrgUnitView = "core.org_unit.view";
+        public const string OrgUnitManage = "core.org_unit.manage";
+        public const string LocationView = "core.location.view";
+        public const string LocationManage = "core.location.manage";
+        public const string GeofenceView = "core.geofence.view";
+        public const string GeofenceManage = "core.geofence.manage";
+        public const string GradeView = "core.grade.view";
+        public const string GradeManage = "core.grade.manage";
+        public const string DesignationView = "core.designation.view";
+        public const string DesignationManage = "core.designation.manage";
+        public const string CostCentreView = "core.cost_centre.view";
+        public const string CostCentreManage = "core.cost_centre.manage";
+        public const string EmployeeTypeView = "core.employee_type.view";
+        public const string EmployeeTypeManage = "core.employee_type.manage";
+
+        /// <summary>Every view permission of the organisation-structure masters (not constants, so the catalogue scan skips them).</summary>
+        public static readonly IReadOnlyList<string> OrgStructureView =
+        [
+            OrgUnitTypeView, OrgUnitView, LocationView, GeofenceView, GradeView, DesignationView, CostCentreView, EmployeeTypeView,
+        ];
+
+        /// <summary>Every manage permission of the organisation-structure masters.</summary>
+        public static readonly IReadOnlyList<string> OrgStructureManage =
+        [
+            OrgUnitTypeManage, OrgUnitManage, LocationManage, GeofenceManage, GradeManage, DesignationManage, CostCentreManage, EmployeeTypeManage,
+        ];
     }
 
     /// <summary>Every code in the catalogue, discovered from the nested classes' constants.</summary>
