@@ -19,11 +19,28 @@ public static class WorkflowInfrastructureExtensions
     public static readonly Version MySqlVersion = new(8, 4, 0);
 
     /// <summary>
-    /// Registers the workflow database, the engine and <see cref="IWorkflowService"/>. The host also registers the modules that answer the
+    /// What the API host needs: the engine (<see cref="AddWorkflowEngine"/>) plus the services behind the user-facing endpoints, which
+    /// also need the data-scope service of the identity module.
+    /// </summary>
+    public static IServiceCollection AddWorkflowInfrastructure(this IServiceCollection services, string? mysqlConnectionString)
+    {
+        services.AddWorkflowEngine(mysqlConnectionString);
+        services.AddScoped<WorkflowScopes>();
+        services.AddScoped<InstanceReader>();
+        services.AddScoped<IWorkflowInboxService, WorkflowInboxService>();
+        services.AddScoped<IWorkflowAdminService, WorkflowAdminService>();
+        services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
+        services.AddScoped<IDelegationService, DelegationService>();
+        services.AddScoped<IMasterUsageCheck, WorkflowUnitTypeUsageCheck>();
+        return services;
+    }
+
+    /// <summary>
+    /// The workflow database, the engine and <see cref="IWorkflowService"/>. The host also registers the modules that answer the
     /// approver lookups, a <see cref="WorkflowKeyDescriptor"/> singleton for every key its modules own, and (in the worker) their
     /// decision handlers.
     /// </summary>
-    public static IServiceCollection AddWorkflowInfrastructure(this IServiceCollection services, string? mysqlConnectionString)
+    public static IServiceCollection AddWorkflowEngine(this IServiceCollection services, string? mysqlConnectionString)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -34,13 +51,7 @@ public static class WorkflowInfrastructureExtensions
         services.AddScoped<ApproverResolver>();
         services.AddScoped<WorkflowEngine>();
         services.AddScoped<WorkflowAccess>();
-        services.AddScoped<InstanceReader>();
         services.AddScoped<IWorkflowService, WorkflowService>();
-        services.AddScoped<IWorkflowInboxService, WorkflowInboxService>();
-        services.AddScoped<IWorkflowAdminService, WorkflowAdminService>();
-        services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
-        services.AddScoped<IDelegationService, DelegationService>();
-        services.AddScoped<IMasterUsageCheck, WorkflowUnitTypeUsageCheck>();
         services.TryAddSingleton<IEventPublisher, LoggingWorkflowEventPublisher>();
         return services;
     }

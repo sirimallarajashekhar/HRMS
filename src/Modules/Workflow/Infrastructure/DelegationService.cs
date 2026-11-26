@@ -8,7 +8,12 @@ using Microsoft.EntityFrameworkCore;
 namespace Hrms.Workflow.Infrastructure;
 
 internal sealed class DelegationService(
-    WorkflowDbContext db, WorkflowAccess access, WorkflowKeyCatalogue catalogue, IApproverDirectory directory, TimeProvider time) : IDelegationService
+    WorkflowDbContext db,
+    WorkflowAccess access,
+    WorkflowScopes scopes,
+    WorkflowKeyCatalogue catalogue,
+    IApproverDirectory directory,
+    TimeProvider time) : IDelegationService
 {
     public async Task<PagedList<DelegationView>> ListAsync(Guid userId, PageRequest paging, CancellationToken cancellationToken)
     {
@@ -106,7 +111,7 @@ internal sealed class DelegationService(
 
     private async Task<Result> MayManageAsync(Guid userId, Guid delegatorUserId, CancellationToken cancellationToken)
     {
-        var scope = await access.ScopeAsync(userId, Permissions.Workflow.DelegationManage, cancellationToken);
+        var scope = await scopes.ForAsync(userId, Permissions.Workflow.DelegationManage, cancellationToken);
         if (scope.IsFailure)
         {
             return scope;

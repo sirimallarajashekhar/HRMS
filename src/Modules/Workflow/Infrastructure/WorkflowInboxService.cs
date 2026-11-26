@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Hrms.Workflow.Infrastructure;
 
 internal sealed class WorkflowInboxService(
-    WorkflowDbContext db, WorkflowEngine engine, WorkflowAccess access, InstanceReader reader, ITenantContext tenant) : IWorkflowInboxService
+    WorkflowDbContext db, WorkflowEngine engine, WorkflowAccess access, WorkflowScopes scopes, InstanceReader reader, ITenantContext tenant) : IWorkflowInboxService
 {
     public async Task<PagedList<TaskView>> ListTasksAsync(Guid userId, bool done, PageRequest paging, CancellationToken cancellationToken)
     {
@@ -188,7 +188,7 @@ internal sealed class WorkflowInboxService(
 
         if (!await IsParticipantAsync(userId, instance, cancellationToken))
         {
-            var scope = await access.ScopeAsync(userId, Permissions.Workflow.InstanceView, cancellationToken);
+            var scope = await scopes.ForAsync(userId, Permissions.Workflow.InstanceView, cancellationToken);
             if (scope.IsFailure)
             {
                 return Result.Failure<InstanceView>(scope.Error);

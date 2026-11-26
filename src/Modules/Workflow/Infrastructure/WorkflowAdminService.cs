@@ -14,14 +14,14 @@ namespace Hrms.Workflow.Infrastructure;
 /// raised or are the subject of, may not give a task to themselves, and the new approver goes through the same exclusions as any other.
 /// </summary>
 internal sealed class WorkflowAdminService(
-    WorkflowDbContext db, WorkflowEngine engine, WorkflowAccess access, InstanceReader reader, ITenantContext tenant) : IWorkflowAdminService
+    WorkflowDbContext db, WorkflowEngine engine, WorkflowAccess access, WorkflowScopes scopes, InstanceReader reader, ITenantContext tenant) : IWorkflowAdminService
 {
     public async Task<Result<PagedList<InstanceSummaryView>>> ListInstancesAsync(
         Guid userId, string? status, string? workflowKey, PageRequest paging, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(paging);
 
-        var scope = await access.ScopeAsync(userId, Permissions.Workflow.InstanceView, cancellationToken);
+        var scope = await scopes.ForAsync(userId, Permissions.Workflow.InstanceView, cancellationToken);
         if (scope.IsFailure)
         {
             return Result.Failure<PagedList<InstanceSummaryView>>(scope.Error);
@@ -147,7 +147,7 @@ internal sealed class WorkflowAdminService(
     {
         ArgumentNullException.ThrowIfNull(paging);
 
-        var scope = await access.ScopeAsync(userId, Permissions.Workflow.InstanceManage, cancellationToken);
+        var scope = await scopes.ForAsync(userId, Permissions.Workflow.InstanceManage, cancellationToken);
         if (scope.IsFailure)
         {
             return Result.Failure<PagedList<FailedDeliveryView>>(scope.Error);
@@ -186,7 +186,7 @@ internal sealed class WorkflowAdminService(
             return Result.Failure(notFound);
         }
 
-        var scope = await access.ScopeAsync(userId, Permissions.Workflow.InstanceManage, cancellationToken);
+        var scope = await scopes.ForAsync(userId, Permissions.Workflow.InstanceManage, cancellationToken);
         if (scope.IsFailure)
         {
             return Result.Failure(scope.Error);
@@ -224,7 +224,7 @@ internal sealed class WorkflowAdminService(
             return Result.Failure<RunningWorkflow>(notFound);
         }
 
-        var scope = await access.ScopeAsync(userId, Permissions.Workflow.InstanceManage, cancellationToken);
+        var scope = await scopes.ForAsync(userId, Permissions.Workflow.InstanceManage, cancellationToken);
         if (scope.IsFailure)
         {
             return Result.Failure<RunningWorkflow>(scope.Error);

@@ -1,7 +1,9 @@
 using Hrms.Core.Infrastructure;
 using Hrms.Employee.Infrastructure;
+using Hrms.Identity.Infrastructure;
 using Hrms.Persistence;
 using Hrms.SharedKernel;
+using Hrms.Workflow.Infrastructure;
 
 namespace Hrms.Worker;
 
@@ -30,6 +32,12 @@ public static class WorkerServices
         // The employee module: events that become due, and the outbox relay.
         services.AddEmployeeBackground(mysqlConnectionString);
         services.AddEmployeeEventProcessing();
+
+        // The workflow engine: deadlines, and delivery of results to the owning modules. Identity is only asked who can approve. A
+        // module that owns a workflow key registers its key declaration and decision handler here as well as in the API host.
+        services.AddIdentityDirectory(mysqlConnectionString);
+        services.AddWorkflowEngine(mysqlConnectionString);
+        services.AddWorkflowProcessing();
         return services;
     }
 }

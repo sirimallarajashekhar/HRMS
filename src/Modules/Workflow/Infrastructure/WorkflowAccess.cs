@@ -17,7 +17,7 @@ internal sealed record SubjectScope(IReadOnlySet<Guid>? EmployeeIds, bool Everyo
 }
 
 /// <summary>The questions every entry point asks before showing or changing anything.</summary>
-internal sealed class WorkflowAccess(WorkflowDbContext db, IApproverDirectory directory, IDataScopeService dataScopes)
+internal sealed class WorkflowAccess(WorkflowDbContext db, IApproverDirectory directory)
 {
     /// <returns>The user's account when it exists in the tenant and is active.</returns>
     public async Task<ApproverAccount?> ActiveAccountAsync(Guid userId, CancellationToken cancellationToken)
@@ -46,8 +46,15 @@ internal sealed class WorkflowAccess(WorkflowDbContext db, IApproverDirectory di
     /// <summary>Whether the task is the user's, or one they hold by delegation. Says nothing about whether they are barred.</summary>
     public static bool Holds(Guid userId, IReadOnlyList<Delegation> delegations, WorkflowTask task, string workflowKey) =>
         task.AssigneeUserId == userId || delegations.Any(d => d.DelegatorUserId == task.AssigneeUserId && d.Covers(workflowKey));
+}
 
-    public async Task<Result<SubjectScope>> ScopeAsync(Guid userId, string permission, CancellationToken cancellationToken)
+/// <summary>
+/// The data-scope question the administrative endpoints ask. Kept apart so a host without user-facing endpoints (the worker) does not
+/// need the data-scope service.
+/// </summary>
+internal sealed class WorkflowScopes(IDataScopeService dataScopes)
+{
+    public async Task<Result<SubjectScope>> ForAsync(Guid userId, string permission, CancellationToken cancellationToken)
     {
         var scope = await dataScopes.ResolveAsync(userId, permission, cancellationToken);
         if (scope.IsEmpty)
