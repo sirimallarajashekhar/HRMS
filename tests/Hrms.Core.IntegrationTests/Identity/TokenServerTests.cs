@@ -201,19 +201,6 @@ public class TokenServerTests(MySqlFixture mysql) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task PasswordGrant_ForAnAccountWithAnMfaRoleBeforeMfaExists_IsRefusedUniformly()
-    {
-        var (_, email) = await NewUserAsync(DefaultRoles.HrAdmin);
-        var (_, wrongStatusBody) = await _host.PasswordAsync("ACME", email, "wrong-password-entirely");
-
-        var (status, body) = await _host.PasswordAsync("ACME", email, Password);
-
-        status.Should().Be(400);
-        Str(body, "error").Should().Be("invalid_grant");
-        Str(body, "error_description").Should().Be(Str(wrongStatusBody, "error_description"));
-    }
-
-    [Fact]
     public async Task TokenEndpoint_RejectsAGetRequest()
     {
         using var response = await _host.GetAsync("/connect/token");
@@ -267,6 +254,17 @@ public class TokenServerTests(MySqlFixture mysql) : IAsyncLifetime
 
         var stored = await _host.LoadUserAsync(_acme.TenantId, user.Id);
         stored.FailedAccessCount.Should().Be(4, "parallel guesses must not slip through uncounted");
+    }
+
+    [Fact]
+    public async Task Lockout_ABurstOfParallelGuesses_StillLocksTheAccount()
+    {
+        var (user, email) = await NewUserAsync();
+
+        await Task.WhenAll(Enumerable.Range(0, 12).Select(_ => _host.PasswordAsync("ACME", email, "wrong-password-entirely")));
+
+        (await _host.LoadUserAsync(_acme.TenantId, user.Id)).LockoutUntil.Should().NotBeNull("parallel guesses must not let an attacker stay under the limit");
+        (await _host.PasswordAsync("ACME", email, Password)).Status.Should().Be(400, "the right password is refused while locked");
     }
 
     // --- refresh ----------------------------------------------------------------------------------------------------

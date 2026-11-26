@@ -269,6 +269,73 @@ namespace Hrms.Identity.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Hrms.Identity.Domain.Users.RecoveryCode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("binary(16)")
+                        .HasColumnName("id");
+
+                    b.Property<int?>("ActiveFlag")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("int")
+                        .HasColumnName("active_flag")
+                        .HasComputedColumnSql("IF(`is_deleted` = 0, 1, NULL)", false);
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("char(64)")
+                        .HasColumnName("code_hash")
+                        .IsFixedLength();
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("binary(16)")
+                        .HasColumnName("created_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("binary(16)")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("binary(16)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("used_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("binary(16)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "UserId", "CodeHash", "ActiveFlag")
+                        .IsUnique()
+                        .HasDatabaseName("ux_user_recovery_code_tenant_user_hash");
+
+                    b.ToTable("user_recovery_code", (string)null);
+                });
+
             modelBuilder.Entity("Hrms.Identity.Domain.Users.UserAccount", b =>
                 {
                     b.Property<Guid>("Id")
@@ -321,6 +388,23 @@ namespace Hrms.Identity.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("LockoutUntil")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("lockout_until");
+
+                    b.Property<bool>("MfaEnabled")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("mfa_enabled");
+
+                    b.Property<DateTime?>("MfaEnrolledAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("mfa_enrolled_at");
+
+                    b.Property<long?>("MfaLastUsedStep")
+                        .HasColumnType("bigint")
+                        .HasColumnName("mfa_last_used_step");
+
+                    b.Property<string>("MfaSecretProtected")
+                        .HasMaxLength(400)
+                        .HasColumnType("varchar(400)")
+                        .HasColumnName("mfa_secret_protected");
 
                     b.Property<bool>("MustChangePassword")
                         .HasColumnType("tinyint(1)")
@@ -712,6 +796,15 @@ namespace Hrms.Identity.Infrastructure.Persistence.Migrations
                     b.HasOne("Hrms.Identity.Domain.Roles.Role", null)
                         .WithMany()
                         .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Hrms.Identity.Domain.Users.RecoveryCode", b =>
+                {
+                    b.HasOne("Hrms.Identity.Domain.Users.UserAccount", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

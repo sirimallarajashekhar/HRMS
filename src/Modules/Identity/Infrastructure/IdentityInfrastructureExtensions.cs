@@ -32,7 +32,9 @@ public static class IdentityInfrastructureExtensions
         services.AddSingleton<PermissionCache>();
         services.AddScoped<IPermissionStore, PermissionStore>();
         services.AddScoped<TenantIdentitySeeder>();
+        services.AddScoped<SecurityPolicyReader>();
         services.AddScoped<IPasswordSignInService, PasswordSignInService>();
+        services.AddScoped<IAccountService, AccountService>();
         services.AddScoped<OAuthClientSeeder>();
 
         // The token server stores (applications, authorizations, tokens). The server and validation halves are configured by the API layer.

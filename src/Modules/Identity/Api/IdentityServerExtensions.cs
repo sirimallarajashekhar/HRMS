@@ -15,6 +15,7 @@ namespace Hrms.Identity.Api;
 public static class IdentityServerExtensions
 {
     public const string TokenRateLimitPolicy = "token";
+    public const string AccountRateLimitPolicy = "account";
     public const string TokenEndpointPath = "/connect/token";
 
     /// <summary>
@@ -70,6 +71,7 @@ public static class IdentityServerExtensions
             });
 
         services.AddAuthentication(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme);
+        services.AddOpenIddict().AddServer(server => server.RegisterScopes(TokenEndpoint.MfaSetupScope));
 
         services.AddRateLimiter(limiter =>
         {
@@ -79,6 +81,17 @@ public static class IdentityServerExtensions
                 _ => new SlidingWindowRateLimiterOptions
                 {
                     PermitLimit = options.TokenRequestsPerMinute,
+                    Window = TimeSpan.FromMinutes(1),
+                    SegmentsPerWindow = 6,
+                    QueueLimit = 0,
+                }));
+
+            // Per signed-in user (their subject), falling back to the address, so one user cannot grind through codes or passwords.
+            limiter.AddPolicy(AccountRateLimitPolicy, http => RateLimitPartition.GetSlidingWindowLimiter(
+                http.User.FindFirst(Claims.Subject)?.Value ?? http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new SlidingWindowRateLimiterOptions
+                {
+                    PermitLimit = options.AccountRequestsPerMinute,
                     Window = TimeSpan.FromMinutes(1),
                     SegmentsPerWindow = 6,
                     QueueLimit = 0,

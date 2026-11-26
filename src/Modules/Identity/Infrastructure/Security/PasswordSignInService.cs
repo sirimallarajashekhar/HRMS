@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Hrms.Contracts;
 using Hrms.Identity.Application;
-using Hrms.Identity.Domain.Security;
+using Hrms.Identity.Domain.Mfa;
 using Hrms.Identity.Domain.Users;
 using Hrms.Identity.Infrastructure.Persistence;
 using Hrms.SharedKernel;
@@ -15,19 +15,27 @@ namespace Hrms.Identity.Infrastructure.Security;
 /// The sign-in rules. Two properties matter more than the rest: every failure looks the same from outside (and takes about as long),
 /// and anything doubtful fails closed. In order: find the active tenant by code, find the account in that tenant, check the password
 /// even when the account is locked or disabled (so the response time does not reveal that), count a wrong password against the
-/// account lockout, refuse any account that holds an MFA-required role until the MFA flow exists, then record the success.
+/// account lockout, then the second factor: an account with MFA must present a valid code (a wrong one counts like a wrong password),
+/// and an account whose role requires MFA but has none yet gets an enrolment-only session. Only then is the success recorded.
 /// </summary>
 public sealed partial class PasswordSignInService(
     IdentityDbContext db,
     ITenantLookup tenantLookup,
     TenantContext tenantContext,
     IPasswordHasher passwordHasher,
+    IFieldEncryptor encryptor,
+    SecurityPolicyReader policies,
     TimeProvider timeProvider,
     ILogger<PasswordSignInService> logger) : IPasswordSignInService
 {
-    private const int ConcurrencyRetries = 3;
+    /// <summary>
+    /// Parallel guesses update the same account row, so each failure is recorded with an optimistic retry. The budget is generous
+    /// and jittered: a burst of N simultaneous guesses needs up to N attempts for the slowest, and losing a count would help the attacker.
+    /// </summary>
+    private const int ConcurrencyRetries = 30;
 
-    public async Task<Result<SignedInUser>> SignInAsync(string tenantCode, string email, string password, CancellationToken cancellationToken)
+    public async Task<Result<SignedInUser>> SignInAsync(
+        string tenantCode, string email, string password, MfaProof? mfa, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(tenantCode);
         ArgumentNullException.ThrowIfNull(email);
@@ -65,11 +73,26 @@ public sealed partial class PasswordSignInService(
         }
 
         var roles = await LoadRolesAsync(user.Id, cancellationToken);
-        if (roles.Any(role => role.RequiresMfa))
+        var enrollmentOnly = false;
+
+        if (user.MfaEnabled)
         {
-            // The password was right but the account needs a second factor, which cannot be given yet: fail closed.
-            LogRefused(logger, "mfa_required");
-            return Result.Failure<SignedInUser>(SignInErrors.MfaRequired);
+            if (mfa is null || mfa.IsEmpty)
+            {
+                LogRefused(logger, "mfa_code_required");
+                return Result.Failure<SignedInUser>(SignInErrors.MfaCodeRequired);
+            }
+
+            if (!await VerifySecondFactorAsync(user, tenantId.Value, mfa, now, cancellationToken))
+            {
+                await RegisterFailureAsync(user.Id, now, cancellationToken);
+                return Result.Failure<SignedInUser>(SignInErrors.InvalidCredentials);
+            }
+        }
+        else if (roles.Any(role => role.RequiresMfa))
+        {
+            // The password was right but the account must use MFA and has not set it up: it may enrol and do nothing else.
+            enrollmentOnly = true;
         }
 
         user.RegisterSuccessfulSignIn(now);
@@ -78,8 +101,22 @@ public sealed partial class PasswordSignInService(
             user.ReplacePasswordHash(passwordHasher.Hash(password));
         }
 
-        await db.SaveChangesAsync(cancellationToken);
-        return Result.Success(new SignedInUser(user.Id, tenantId.Value, user.SecurityStamp, [.. roles.Select(role => role.Code)]));
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another sign-in changed the account at the same moment (for example it used the same code first): refuse, the client retries.
+            return Result.Failure<SignedInUser>(SignInErrors.InvalidCredentials);
+        }
+
+        return Result.Success(new SignedInUser(
+            user.Id,
+            tenantId.Value,
+            user.SecurityStamp,
+            enrollmentOnly ? [] : [.. roles.Select(role => role.Code)],
+            enrollmentOnly));
     }
 
     public async Task<Result<SignedInUser>> RevalidateAsync(Guid tenantId, Guid userId, string securityStamp, CancellationToken cancellationToken)
@@ -96,12 +133,44 @@ public sealed partial class PasswordSignInService(
         }
 
         var roles = await LoadRolesAsync(user.Id, cancellationToken);
-        if (roles.Any(role => role.RequiresMfa))
+        if (roles.Any(role => role.RequiresMfa) && !user.MfaEnabled)
         {
+            // A refresh token is only ever issued to a session that passed MFA; if MFA is gone, so is the session.
             return Result.Failure<SignedInUser>(SignInErrors.MfaRequired);
         }
 
         return Result.Success(new SignedInUser(user.Id, tenantId, user.SecurityStamp, [.. roles.Select(role => role.Code)]));
+    }
+
+    private async Task<bool> VerifySecondFactorAsync(UserAccount user, Guid tenantId, MfaProof mfa, DateTime now, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(mfa.TotpCode))
+        {
+            string secretText;
+            try
+            {
+                secretText = encryptor.Unprotect(user.MfaSecretProtected ?? string.Empty, MfaContexts.Secret(tenantId, user.Id));
+            }
+            catch (CryptographicException)
+            {
+                LogSecretUnreadable(logger);
+                return false;
+            }
+
+            var secret = Base32.TryDecode(secretText);
+            var step = secret is null ? null : Totp.Verify(secret, mfa.TotpCode.Trim(), new DateTimeOffset(now, TimeSpan.Zero), user.MfaLastUsedStep);
+            return step is { } accepted && user.TryAcceptMfaStep(accepted);
+        }
+
+        var normalised = RecoveryCodes.Normalise(mfa.RecoveryCode);
+        if (!RecoveryCodes.LooksValid(normalised))
+        {
+            return false;
+        }
+
+        var hash = RecoveryCodes.Hash(normalised);
+        var code = await db.RecoveryCodes.SingleOrDefaultAsync(c => c.UserId == user.Id && c.CodeHash == hash && c.UsedAt == null, cancellationToken);
+        return code is not null && code.TryUse(now);
     }
 
     private Result<SignedInUser> RefuseAfterDummyWork(string password)
@@ -128,7 +197,7 @@ public sealed partial class PasswordSignInService(
 
     private async Task RegisterFailureAsync(Guid userId, DateTime now, CancellationToken cancellationToken)
     {
-        var policy = await LockoutPolicyAsync(DateOnly.FromDateTime(now), cancellationToken);
+        var policy = await policies.LockoutAsync(DateOnly.FromDateTime(now), cancellationToken);
 
         for (var attempt = 0; attempt < ConcurrencyRetries; attempt++)
         {
@@ -137,25 +206,19 @@ public sealed partial class PasswordSignInService(
             try
             {
                 await db.SaveChangesAsync(cancellationToken);
-                LogRefused(logger, outcome.LockedNow ? "locked" : "wrong_password");
+                LogRefused(logger, outcome.LockedNow ? "locked" : "wrong_credentials");
                 return;
             }
             catch (DbUpdateConcurrencyException)
             {
-                // Guesses arriving in parallel update the same row; reload and count again so none is lost.
+                // Guesses arriving in parallel update the same row; reload and count again so none is lost. The random pause
+                // spreads the retries out so contenders stop colliding on the same instant.
                 db.ChangeTracker.Clear();
+                await Task.Delay(Random.Shared.Next(1, 4 + (attempt * 2)), cancellationToken);
             }
         }
 
-        LogRefused(logger, "wrong_password");
-    }
-
-    private async Task<LockoutPolicy> LockoutPolicyAsync(DateOnly today, CancellationToken cancellationToken)
-    {
-        var policy = await db.SecurityPolicies.AsNoTracking().ValidOn(today)
-            .Select(p => new { p.MaxFailedAttempts, p.LockoutMinutes })
-            .FirstOrDefaultAsync(cancellationToken);
-        return policy is null ? LockoutPolicy.Default : new LockoutPolicy(policy.MaxFailedAttempts, TimeSpan.FromMinutes(policy.LockoutMinutes));
+        LogRefused(logger, "wrong_credentials");
     }
 
     private async Task<List<RoleInfo>> LoadRolesAsync(Guid userId, CancellationToken cancellationToken) =>
@@ -172,4 +235,7 @@ public sealed partial class PasswordSignInService(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sign-in refused ({Reason})")]
     private static partial void LogRefused(ILogger logger, string reason);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "A stored MFA secret could not be decrypted; the account cannot use MFA until it is reset")]
+    private static partial void LogSecretUnreadable(ILogger logger);
 }

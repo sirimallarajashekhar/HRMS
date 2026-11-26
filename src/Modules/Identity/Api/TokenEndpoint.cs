@@ -27,6 +27,15 @@ public static class TokenEndpoint
     /// <summary>Carries the account security stamp inside refresh tokens only, never in an access token.</summary>
     public const string StampClaim = "sstamp";
 
+    /// <summary>The scope of the enrolment-only session: it can reach the MFA enrolment endpoints and carries no roles.</summary>
+    public const string MfaSetupScope = "mfa_setup";
+
+    public const string TotpParameter = "totp_code";
+    public const string RecoveryParameter = "recovery_code";
+
+    /// <summary>The OAuth error that tells a client to ask the user for their verification code.</summary>
+    public const string MfaRequiredError = "mfa_required";
+
     public const string RefusedDescription = "The sign-in details are not valid.";
 
     public static IEndpointRouteBuilder MapTokenEndpoint(this IEndpointRouteBuilder routes)
@@ -76,14 +85,25 @@ public static class TokenEndpoint
             return Refuse(Errors.InvalidRequest, "The username, password and tenant are required.");
         }
 
-        var result = await signIn.SignInAsync(tenant, request.Username, request.Password, http.RequestAborted);
+        var proof = new MfaProof(request.GetParameter(TotpParameter)?.ToString(), request.GetParameter(RecoveryParameter)?.ToString());
+        var result = await signIn.SignInAsync(tenant, request.Username, request.Password, proof, http.RequestAborted);
         if (result.IsFailure)
         {
-            // Whatever the reason, the caller sees the same refusal.
-            return Refuse(Errors.InvalidGrant, RefusedDescription);
+            // The one answer that differs: the password was right and the account has MFA but no code came with it, so the client
+            // must ask for one. Every other cause, a wrong code included, gets the same refusal.
+            return result.Error == SignInErrors.MfaCodeRequired
+                ? Refuse(MfaRequiredError, "A verification code is required.")
+                : Refuse(Errors.InvalidGrant, RefusedDescription);
         }
 
-        return SignIn(BuildPrincipal(result.Value.UserId.ToString("D"), result.Value.TenantId, result.Value.RoleCodes, result.Value.SecurityStamp, request.GetScopes()));
+        var user = result.Value;
+        if (user.EnrollmentOnly)
+        {
+            // Password right, MFA mandatory but not set up: an enrolment-only session (no roles, no refresh token).
+            return SignIn(BuildPrincipal(user.UserId.ToString("D"), user.TenantId, [], user.SecurityStamp, [MfaSetupScope]));
+        }
+
+        return SignIn(BuildPrincipal(user.UserId.ToString("D"), user.TenantId, user.RoleCodes, user.SecurityStamp, request.GetScopes()));
     }
 
     private static async Task<IResult> RefreshAsync(HttpContext http, IPasswordSignInService signIn)

@@ -27,6 +27,8 @@ public sealed class IdentityDbContext(
 
     public DbSet<RoleGrant> RoleGrants => Set<RoleGrant>();
 
+    public DbSet<RecoveryCode> RecoveryCodes => Set<RecoveryCode>();
+
     public DbSet<UserRoleScope> UserRoleScopes => Set<UserRoleScope>();
 
     public DbSet<TenantSecurityPolicy> SecurityPolicies => Set<TenantSecurityPolicy>();

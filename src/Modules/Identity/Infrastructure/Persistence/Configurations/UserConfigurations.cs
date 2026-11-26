@@ -19,6 +19,10 @@ internal sealed class UserAccountConfiguration : IEntityTypeConfiguration<UserAc
         builder.Property(u => u.PasswordHash).HasMaxLength(512).IsRequired();
         builder.Property(u => u.SecurityStamp).HasMaxLength(64).IsRequired();
 
+        // The TOTP secret is stored encrypted ("v1.{keyId}.{base64}"), never as plain text.
+        builder.Property(u => u.MfaSecretProtected).HasMaxLength(400);
+        builder.Ignore(u => u.HasPendingMfaEnrollment);
+
         // Stored as text so reordering the enum can never reinterpret existing rows.
         builder.Property(u => u.Status).HasConversion<string>().HasMaxLength(16).IsRequired();
 
@@ -60,5 +64,19 @@ internal sealed class TenantSecurityPolicyConfiguration : IEntityTypeConfigurati
             table.HasCheckConstraint("ck_tenant_security_policy_attempts", "`max_failed_attempts` BETWEEN 3 AND 20");
             table.HasCheckConstraint("ck_tenant_security_policy_lockout", "`lockout_minutes` BETWEEN 1 AND 1440");
         });
+    }
+}
+
+internal sealed class RecoveryCodeConfiguration : IEntityTypeConfiguration<RecoveryCode>
+{
+    public void Configure(EntityTypeBuilder<RecoveryCode> builder)
+    {
+        builder.ToTable("user_recovery_code");
+        builder.HasKey(c => c.Id);
+        builder.Property(c => c.CodeHash).HasMaxLength(64).IsFixedLength().IsRequired();
+        builder.Ignore(c => c.IsUsed);
+
+        builder.HasOne<UserAccount>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasUniqueLiveCombination("ux_user_recovery_code_tenant_user_hash", nameof(RecoveryCode.UserId), nameof(RecoveryCode.CodeHash));
     }
 }

@@ -65,6 +65,19 @@ public sealed partial class UserAccount : TenantEntity
     /// <summary>The employee this account belongs to, once the employee module exists (no foreign key across modules).</summary>
     public Guid? EmployeeId { get; private set; }
 
+    /// <summary>True once the user has proved they hold the authenticator; from then on every sign-in needs a code.</summary>
+    public bool MfaEnabled { get; private set; }
+
+    /// <summary>The TOTP secret, encrypted for storage. While <see cref="MfaEnabled"/> is false it is a pending enrolment.</summary>
+    public string? MfaSecretProtected { get; private set; }
+
+    public DateTime? MfaEnrolledAt { get; private set; }
+
+    /// <summary>The last time step a code was accepted for; a code for this step or an earlier one is a replay and is refused.</summary>
+    public long? MfaLastUsedStep { get; private set; }
+
+    public bool HasPendingMfaEnrollment => !MfaEnabled && MfaSecretProtected is not null;
+
     public static Result<UserAccount> Create(
         string? email,
         string? displayName,
@@ -173,6 +186,60 @@ public sealed partial class UserAccount : TenantEntity
     }
 
     public void Enable() => Status = UserStatus.Active;
+
+    /// <summary>Stores a freshly generated, encrypted secret as a pending enrolment (replacing an earlier unconfirmed one).</summary>
+    public Result BeginMfaEnrollment(string protectedSecret)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(protectedSecret);
+
+        if (MfaEnabled)
+        {
+            return Result.Failure(Error.Conflict("identity.mfa.already_enabled", "MFA is already set up for this account."));
+        }
+
+        MfaSecretProtected = protectedSecret;
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Turns MFA on after the user proved the authenticator works by giving a valid code for <paramref name="acceptedStep"/>. The
+    /// security stamp rotates, so sessions started before MFA existed must sign in again.
+    /// </summary>
+    public Result ConfirmMfaEnrollment(long acceptedStep, DateTime nowUtc)
+    {
+        if (!HasPendingMfaEnrollment)
+        {
+            return Result.Failure(Error.Conflict("identity.mfa.no_pending_enrollment", "Start MFA enrolment first."));
+        }
+
+        MfaEnabled = true;
+        MfaEnrolledAt = nowUtc;
+        MfaLastUsedStep = acceptedStep;
+        SecurityStamp = NewStamp();
+        return Result.Success();
+    }
+
+    /// <summary>Turns MFA off and forgets the secret. The stamp rotates so existing sessions end.</summary>
+    public void DisableMfa()
+    {
+        MfaEnabled = false;
+        MfaSecretProtected = null;
+        MfaEnrolledAt = null;
+        MfaLastUsedStep = null;
+        SecurityStamp = NewStamp();
+    }
+
+    /// <summary>Records that a code for this step was used. False means the step is not newer than the last one: a replay.</summary>
+    public bool TryAcceptMfaStep(long step)
+    {
+        if (MfaLastUsedStep is { } last && step <= last)
+        {
+            return false;
+        }
+
+        MfaLastUsedStep = step;
+        return true;
+    }
 
     private static string NewStamp() => Guid.NewGuid().ToString("N");
 

@@ -24,6 +24,9 @@ public sealed class IdentityServerOptions
 
     public int TokenRequestsPerMinute { get; init; } = 20;
 
+    /// <summary>Per signed-in user: the account endpoints check passwords and codes, so guessing through a stolen session is slowed too.</summary>
+    public int AccountRequestsPerMinute { get; init; } = 20;
+
     /// <summary>Required outside Development. Development uses throw-away keys, so tokens do not survive a restart.</summary>
     public CertificateOptions SigningCertificate { get; init; } = new();
 
@@ -35,6 +38,7 @@ public sealed class IdentityServerOptions
         Check(RefreshTokenDays is >= 1 and <= 90, nameof(RefreshTokenDays), "1 to 90");
         Check(RefreshReuseLeewaySeconds is >= 0 and <= 60, nameof(RefreshReuseLeewaySeconds), "0 to 60");
         Check(TokenRequestsPerMinute is >= 1 and <= 1000, nameof(TokenRequestsPerMinute), "1 to 1000");
+        Check(AccountRequestsPerMinute is >= 1 and <= 1000, nameof(AccountRequestsPerMinute), "1 to 1000");
     }
 
     private static void Check(bool valid, string name, string range)

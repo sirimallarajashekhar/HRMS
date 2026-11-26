@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Hrms.Contracts;
 using Hrms.Core.Infrastructure;
@@ -86,7 +87,8 @@ public sealed class TokenServerTestHost : IAsyncDisposable
         string environment = "Development")
     {
         var clock = new MovableClock(DateTimeOffset.UtcNow);
-        var configuration = new Dictionary<string, string?> { ["Tenancy:HeaderResolver:Enabled"] = "true" };
+        var configuration = TestEncryption.Settings();
+        configuration["Tenancy:HeaderResolver:Enabled"] = "true";
         foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
         {
             configuration[key] = value;
@@ -120,6 +122,7 @@ public sealed class TokenServerTestHost : IAsyncDisposable
                     app.UseEndpoints(endpoints =>
                     {
                         endpoints.MapTokenEndpoint();
+                        endpoints.MapGroup("/api/v1").MapAccountEndpoints();
                         endpoints.MapGet("/me", (HttpContext http, ITenantContext tenant) => Results.Ok(new
                         {
                             sub = http.User.FindFirst(HrmsClaims.Subject)?.Value,
@@ -175,6 +178,17 @@ public sealed class TokenServerTestHost : IAsyncDisposable
         if (tenantHeader is { } tenant)
         {
             request.Headers.Add(HeaderTenantResolver.HeaderName, tenant.ToString());
+        }
+
+        return await Client.SendAsync(request);
+    }
+
+    public async Task<HttpResponseMessage> PostJsonAsync(string path, object body, string? bearer = null)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body) };
+        if (bearer is not null)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
         }
 
         return await Client.SendAsync(request);

@@ -3,6 +3,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Hrms.Core.Infrastructure;
 using Hrms.Core.Infrastructure.Persistence;
+using Hrms.Core.IntegrationTests.Identity;
 using Hrms.Core.IntegrationTests.Persistence;
 using Hrms.Http.Tenancy;
 using Hrms.Persistence;
@@ -39,10 +40,10 @@ public class TenantIsolationPipelineTests(MySqlFixture mysql) : IAsyncLifetime
             .UseEnvironment("Development")
             .ConfigureWebHost(web => web
                 .UseTestServer()
-                .ConfigureAppConfiguration(config => config.AddInMemoryCollection(new Dictionary<string, string?>
+                .ConfigureAppConfiguration(config => config.AddInMemoryCollection(TestEncryption.Settings().Concat(new Dictionary<string, string?>
                 {
                     ["Tenancy:HeaderResolver:Enabled"] = "true",
-                }))
+                })))
                 .ConfigureServices(services =>
                 {
                     services.AddRouting();

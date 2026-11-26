@@ -14,7 +14,7 @@ public static class TestCertificates
 
     private static readonly Lazy<(string Signing, string Encryption)> Files = new(() => (Create(), Create()));
 
-    /// <summary>Runs the host as Production with valid certificates configured.</summary>
+    /// <summary>Runs the host as Production with valid certificates and an encryption key configured.</summary>
     public static IWebHostBuilder UseProductionWithCertificates(this IWebHostBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -25,7 +25,10 @@ public static class TestCertificates
             .UseSetting("Identity:Server:SigningCertificate:Path", signing)
             .UseSetting("Identity:Server:SigningCertificate:Password", Password)
             .UseSetting("Identity:Server:EncryptionCertificate:Path", encryption)
-            .UseSetting("Identity:Server:EncryptionCertificate:Password", Password);
+            .UseSetting("Identity:Server:EncryptionCertificate:Password", Password)
+            .UseSetting("Encryption:CurrentKeyId", TestEncryption.KeyId)
+            .UseSetting("Encryption:Keys:0:Id", TestEncryption.KeyId)
+            .UseSetting("Encryption:Keys:0:Key", TestEncryption.Key);
     }
 
     private static string Create()

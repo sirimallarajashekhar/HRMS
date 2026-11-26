@@ -269,9 +269,10 @@ public class TokenServerConfigurationTests(MySqlFixture mysql) : IAsyncLifetime
         var tenantContext = new TenantContext();
         prepare?.Invoke(tenantContext);
         var service = new PasswordSignInService(
-            context, new FixedLookup(lookedUpTenant), tenantContext, spy, TimeProvider.System, NullLogger<PasswordSignInService>.Instance);
+            context, new FixedLookup(lookedUpTenant), tenantContext, spy, TestEncryption.Encryptor(), new SecurityPolicyReader(context),
+            TimeProvider.System, NullLogger<PasswordSignInService>.Instance);
 
-        await service.SignInAsync("ANY", email, password, CancellationToken.None);
+        await service.SignInAsync("ANY", email, password, mfa: null, CancellationToken.None);
         return spy.Verifications;
     }
 
