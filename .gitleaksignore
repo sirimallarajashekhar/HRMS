@@ -1,0 +1,9 @@
+# Two historical findings in commit aa95e71 (branch feat/p0-4-identity). Format: commit:file:rule:line.
+# Each is listed individually; any new finding anywhere still fails the scan.
+
+# A random local-development field-encryption key (id "dev"). It never protected real data and the host refuses
+# the "dev" key id outside Development. Removed from the tree in 7af4a82; keys now live in user secrets / .env.
+aa95e718b8845284ba56c40769416c4c063ade20:src/Host/Hrms.Api/appsettings.Development.json:generic-api-key:9
+
+# The public RFC 6238 test-vector secret ("12345678901234567890" in base32), written into a unit-test assertion.
+aa95e718b8845284ba56c40769416c4c063ade20:tests/Hrms.Identity.UnitTests/MfaAndEncryptionTests.cs:generic-api-key:96
