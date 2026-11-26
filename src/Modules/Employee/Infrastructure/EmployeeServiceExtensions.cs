@@ -22,8 +22,8 @@ public static class EmployeeServiceExtensions
 
         // The real scope expander replaces the identity module's self-only default, whichever module registered first.
         services.Replace(ServiceDescriptor.Scoped<IEmployeeScopeExpander, EmployeeScopeExpander>());
-        services.AddScoped<IEmployeeDirectory, EmployeeDirectory>();
-        services.AddScoped<IEmployeePositionLookup, EmployeePositionLookup>();
+
+        services.AddEmployeeLookups();
 
         // Core refuses to delete a master that a job period still points at.
         foreach (var kind in new[]
@@ -37,6 +37,14 @@ public static class EmployeeServiceExtensions
         // Defaults that other modules (country packs, a message broker) replace.
         services.TryAddScoped<ICurrentUser, NoCurrentUser>();
         services.TryAddScoped<IStatutoryIdValidator, BasicStatutoryIdValidator>();
+        return services;
+    }
+
+    /// <summary>What other modules ask of this one, and the default publisher. Needed by the API and by the worker.</summary>
+    internal static IServiceCollection AddEmployeeLookups(this IServiceCollection services)
+    {
+        services.AddScoped<IEmployeeDirectory, EmployeeDirectory>();
+        services.AddScoped<IEmployeePositionLookup, EmployeePositionLookup>();
         services.TryAddSingleton<IEventPublisher, LoggingEventPublisher>();
         return services;
     }

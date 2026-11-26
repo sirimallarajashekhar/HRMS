@@ -1,10 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry;
-using Hrms.Core.Infrastructure;
-using Hrms.Employee.Infrastructure;
-using Hrms.Persistence;
-using Hrms.SharedKernel;
 using Hrms.Worker;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -44,19 +40,6 @@ if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOIN
     otel.UseOtlpExporter();
 }
 
-// Hangfire and queue consumers are registered here from P0.2 / P1.3 onwards.
-builder.Services.AddHostedService<HeartbeatService>();
-
-// Background processing for the employee module: events that become due, and the outbox relay. There is no web request here, so the tenant
-// context is set per tenant by the service, and the actor is the system.
-var mysqlConnectionString = builder.Configuration.GetConnectionString("Mysql");
-builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton<IActorContext, SystemActorContext>();
-builder.Services.AddScoped<TenantContext>();
-builder.Services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantContext>());
-builder.Services.AddHrmsPersistence(mysqlConnectionString);
-builder.Services.AddCoreInfrastructure(mysqlConnectionString);
-builder.Services.AddEmployeeInfrastructure(mysqlConnectionString);
-builder.Services.AddEmployeeEventProcessing();
+builder.Services.AddHrmsWorker(builder.Configuration.GetConnectionString("Mysql"));
 
 await builder.Build().RunAsync();
