@@ -8,6 +8,9 @@
     <ProjectReference Include="../../src/Contracts/Hrms.Contracts/Hrms.Contracts.csproj" />
     <ProjectReference Include="../../src/Modules/Core/Domain/Hrms.Core.Domain.csproj" />
     <ProjectReference Include="../../src/Modules/Core/Infrastructure/Hrms.Core.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/Modules/Identity/Infrastructure/Hrms.Identity.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/Modules/Identity/Application/Hrms.Identity.Application.csproj" />
+    <ProjectReference Include="../../src/Modules/Identity/Domain/Hrms.Identity.Domain.csproj" />
     <ProjectReference Include="../../src/Platform/Hrms.Http/Hrms.Http.csproj" />
     <ProjectReference Include="../../src/Platform/Hrms.Persistence/Hrms.Persistence.csproj" />
     <ProjectReference Include="../../src/SharedKernel/Hrms.SharedKernel/Hrms.SharedKernel.csproj" />

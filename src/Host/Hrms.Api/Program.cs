@@ -6,6 +6,7 @@ using Hrms.Api;
 using Hrms.Api.Health;
 using Hrms.Core.Api;
 using Hrms.Core.Infrastructure;
+using Hrms.Identity.Infrastructure;
 using Hrms.Persistence;
 using Hrms.Http.Authorization;
 using Hrms.Http.Tenancy;
@@ -67,6 +68,7 @@ builder.Services.AddHrmsTenancy();
 builder.Services.AddHrmsPersistence(mysqlConnectionString);
 // After AddHrmsTenancy so the real tenant directory replaces its deny-all default.
 builder.Services.AddCoreInfrastructure(mysqlConnectionString);
+builder.Services.AddIdentityInfrastructure(mysqlConnectionString);
 
 // Deny by default. Real JWT authentication replaces the placeholder scheme when the token server is wired in.
 builder.Services.AddAuthentication(NoAuthenticationHandler.SchemeName).AddHrmsNoAuthentication();

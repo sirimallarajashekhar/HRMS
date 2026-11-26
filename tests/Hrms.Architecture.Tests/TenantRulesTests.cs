@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Hrms.Core.Infrastructure;
 using Hrms.Core.Infrastructure.Persistence;
+using Hrms.Identity.Infrastructure;
+using Hrms.Identity.Infrastructure.Persistence;
 using Hrms.Persistence;
 using Hrms.SharedKernel;
 using Microsoft.EntityFrameworkCore;
@@ -99,6 +101,45 @@ public class TenantRulesTests
             .Select(e => e.ClrType.Name);
 
         unfiltered.Should().Equal("Tenant");
+    }
+
+    private static IdentityDbContext IdentityContext()
+    {
+        var options = (DbContextOptions<IdentityDbContext>)IdentityInfrastructureExtensions
+            .UseIdentityMySql(new DbContextOptionsBuilder<IdentityDbContext>(), "Server=127.0.0.1;Database=unused;User ID=x;Password=x")
+            .Options;
+        return new IdentityDbContext(options, new TenantContext(), new SystemActorContext(), TimeProvider.System);
+    }
+
+    [Fact]
+    public void IdentityModel_EveryTenantEntityIsFilteredAndIndexedWithTenantIdFirst()
+    {
+        using var context = IdentityContext();
+
+        TenantModelRule.FindViolations(context.Model).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void IdentityModel_MapsEveryConcreteTenantEntityDeclaredInTheIdentityDomain()
+    {
+        using var context = IdentityContext();
+        var declared = SolutionModel.Layer("Identity", "Domain").GetTypes()
+            .Where(t => !t.IsAbstract && t.IsAssignableTo(typeof(TenantEntity)))
+            .ToArray();
+
+        declared.Should().NotBeEmpty();
+        declared.Where(t => context.Model.FindEntityType(t) is null).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void IdentityModel_TheGlobalPermissionCatalogueIsTheOnlyUnfilteredEntity()
+    {
+        using var context = IdentityContext();
+
+        context.Model.GetEntityTypes()
+            .Where(e => !e.ClrType.IsAssignableTo(typeof(TenantEntity)))
+            .Select(e => e.ClrType.Name)
+            .Should().Equal("PermissionDefinition");
     }
 
     private sealed class Unindexed : TenantEntity;

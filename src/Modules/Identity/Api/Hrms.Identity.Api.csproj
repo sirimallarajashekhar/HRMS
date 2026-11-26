@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../Application/Hrms.Identity.Application.csproj" />
+    <ProjectReference Include="../../../Contracts/Hrms.Contracts/Hrms.Contracts.csproj" />
+    <ProjectReference Include="../../../Platform/Hrms.Http/Hrms.Http.csproj" />
+  </ItemGroup>
+</Project>

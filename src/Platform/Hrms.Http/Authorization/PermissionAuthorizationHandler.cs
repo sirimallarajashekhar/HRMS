@@ -10,7 +10,7 @@ namespace Hrms.Http.Authorization;
 /// </summary>
 public sealed partial class PermissionAuthorizationHandler(
     ITenantContext tenantContext,
-    IPermissionStore permissionStore,
+    IServiceProvider services,
     ILogger<PermissionAuthorizationHandler> logger) : AuthorizationHandler<PermissionRequirement>
 {
     protected override async Task HandleRequirementAsync(AuthorizationHandlerContext context, PermissionRequirement requirement)
@@ -40,6 +40,9 @@ public sealed partial class PermissionAuthorizationHandler(
         }
 
         var cancellation = (context.Resource as HttpContext)?.RequestAborted ?? CancellationToken.None;
+        // Resolved only when a permission is actually checked: the middleware builds this handler for every request, anonymous ones
+        // included, and the store reaches the database, so a host without one must still serve probes and the API description.
+        var permissionStore = services.GetRequiredService<IPermissionStore>();
         var granted = await permissionStore.GetPermissionsAsync(tenantFromToken.Value, roles, cancellation);
         if (granted.Contains(requirement.Permission))
         {
