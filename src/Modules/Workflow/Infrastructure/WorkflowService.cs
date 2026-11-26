@@ -74,16 +74,13 @@ internal sealed class WorkflowService(
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (Exception ex) when (WriteConflicts.Is(ex))
         {
             // Another start for the same request won the race; the unique index let only one through.
             db.ChangeTracker.Clear();
-            if (await FindAsync(request.WorkflowKey, request.EntityId, cancellationToken) is { } winner)
-            {
-                return Repeat(winner, fingerprint);
-            }
-
-            throw;
+            return await FindAsync(request.WorkflowKey, request.EntityId, cancellationToken) is { } winner
+                ? Repeat(winner, fingerprint)
+                : Conflict(Errors.Changed().Code, Errors.Changed().Message);
         }
 
         return Success(instance);
@@ -127,7 +124,7 @@ internal sealed class WorkflowService(
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (Exception ex) when (ex is DbUpdateConcurrencyException or DbUpdateException)
+        catch (Exception ex) when (WriteConflicts.Is(ex))
         {
             db.ChangeTracker.Clear();
             return Conflict(Errors.Changed().Code, Errors.Changed().Message);

@@ -207,7 +207,7 @@ internal sealed class WorkflowAdminService(
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateConcurrencyException)
+        catch (Exception ex) when (WriteConflicts.Is(ex))
         {
             return Result.Failure(Errors.Changed());
         }
@@ -293,7 +293,7 @@ internal sealed class WorkflowAdminService(
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (Exception ex) when (ex is DbUpdateConcurrencyException or DbUpdateException)
+        catch (Exception ex) when (WriteConflicts.Is(ex))
         {
             db.ChangeTracker.Clear();
             return Result.Failure<InstanceView>(Errors.Changed());

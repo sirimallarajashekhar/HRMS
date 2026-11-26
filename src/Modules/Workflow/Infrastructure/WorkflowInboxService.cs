@@ -167,7 +167,7 @@ internal sealed class WorkflowInboxService(
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (Exception ex) when (ex is DbUpdateConcurrencyException or DbUpdateException)
+        catch (Exception ex) when (WriteConflicts.Is(ex))
         {
             db.ChangeTracker.Clear();
             return Fail(Errors.Changed());
@@ -245,7 +245,7 @@ internal sealed class WorkflowInboxService(
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (Exception ex) when (ex is DbUpdateConcurrencyException or DbUpdateException)
+        catch (Exception ex) when (WriteConflicts.Is(ex))
         {
             db.ChangeTracker.Clear();
             return Result.Failure<InstanceView>(Errors.Changed());

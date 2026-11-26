@@ -45,7 +45,7 @@ internal sealed partial class DeadlineProcessor(
             {
                 handled += await HandleAsync(instanceId, cancellationToken);
             }
-            catch (DbUpdateConcurrencyException)
+            catch (Exception ex) when (WriteConflicts.Is(ex))
             {
                 // Someone acted at the same moment. Nothing was written; the next run looks again.
             }

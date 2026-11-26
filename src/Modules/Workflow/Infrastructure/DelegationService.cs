@@ -94,7 +94,7 @@ internal sealed class DelegationService(
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateConcurrencyException)
+        catch (Exception ex) when (WriteConflicts.Is(ex))
         {
             return Fail(Errors.Changed());
         }

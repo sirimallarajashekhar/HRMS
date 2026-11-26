@@ -45,14 +45,21 @@ public static class WorkflowInfrastructureExtensions
         return services;
     }
 
-    /// <summary>Adds deadlines and result delivery. Register it in the worker host only.</summary>
+    /// <summary>Adds deadlines and result delivery on a timer. Register it in the worker host only.</summary>
     public static IServiceCollection AddWorkflowProcessing(this IServiceCollection services)
+    {
+        services.AddWorkflowProcessingServices();
+        services.AddHostedService(sp => sp.GetRequiredService<WorkflowBackgroundService>());
+        return services;
+    }
+
+    /// <summary>The same work without the timer, for a caller that runs each pass itself (tests, operational tools).</summary>
+    public static IServiceCollection AddWorkflowProcessingServices(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddScoped<DeadlineProcessor>();
         services.AddScoped<WorkflowOutboxRelay>();
         services.AddSingleton<WorkflowBackgroundService>();
-        services.AddHostedService(sp => sp.GetRequiredService<WorkflowBackgroundService>());
         return services;
     }
 

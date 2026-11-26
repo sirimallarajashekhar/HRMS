@@ -13,6 +13,7 @@ using Hrms.Employee.Infrastructure;
 using Hrms.Identity.Api;
 using Hrms.Identity.Infrastructure;
 using Hrms.Persistence;
+using Hrms.Workflow.Api;
 using Hrms.Workflow.Infrastructure;
 using Hrms.Http.Authorization;
 using Hrms.Http.Tenancy;
@@ -119,6 +120,7 @@ v1.MapOrgStructureEndpoints();
 v1.MapAccountEndpoints();
 v1.MapUserEndpoints();
 v1.MapEmployeeEndpoints();
+v1.MapWorkflowEndpoints();
 
 // The OAuth token endpoint lives outside /api/v1: it is part of the OAuth protocol, not of the versioned API.
 app.MapTokenEndpoint();

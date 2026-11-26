@@ -84,7 +84,7 @@ internal sealed class WorkflowDefinitionService(
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (Exception ex) when (WriteConflicts.Is(ex))
         {
             // Someone else created the same version first.
             db.ChangeTracker.Clear();
@@ -127,7 +127,7 @@ internal sealed class WorkflowDefinitionService(
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
-        catch (Exception ex) when (ex is DbUpdateConcurrencyException or DbUpdateException)
+        catch (Exception ex) when (WriteConflicts.Is(ex))
         {
             await transaction.RollbackAsync(cancellationToken);
             db.ChangeTracker.Clear();
@@ -184,7 +184,7 @@ internal sealed class WorkflowDefinitionService(
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateConcurrencyException)
+        catch (Exception ex) when (WriteConflicts.Is(ex))
         {
             db.ChangeTracker.Clear();
             return Fail(Stale());
