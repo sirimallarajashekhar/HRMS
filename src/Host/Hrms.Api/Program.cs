@@ -6,6 +6,7 @@ using Hrms.Api;
 using Hrms.Api.Bootstrap;
 using Hrms.Api.Health;
 using Hrms.Core.Api;
+using Hrms.Core.Api.Org;
 using Hrms.Core.Infrastructure;
 using Hrms.Identity.Api;
 using Hrms.Identity.Infrastructure;
@@ -109,6 +110,7 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check 
 ApiVersionSet versionSet = app.NewApiVersionSet().HasApiVersion(new ApiVersion(1, 0)).Build();
 var v1 = app.MapGroup("/api/v{version:apiVersion}").WithApiVersionSet(versionSet);
 v1.MapCoreEndpoints();
+v1.MapOrgStructureEndpoints();
 v1.MapAccountEndpoints();
 
 // The OAuth token endpoint lives outside /api/v1: it is part of the OAuth protocol, not of the versioned API.

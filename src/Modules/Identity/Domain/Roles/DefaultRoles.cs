@@ -26,19 +26,20 @@ public static class DefaultRoles
         [
             Permissions.Identity.UserView, Permissions.Identity.UserManage, Permissions.Identity.RoleView,
             Permissions.Identity.SensitiveView, Permissions.Core.LegalEntityView, Permissions.Core.LegalEntityManage,
+            .. Permissions.Core.OrgStructureView, .. Permissions.Core.OrgStructureManage,
         ]),
         new(PayrollAdmin, "Payroll administrator", "Runs payroll and can see sensitive pay fields.", true,
         [
-            Permissions.Identity.SensitiveView, Permissions.Core.LegalEntityView,
+            Permissions.Identity.SensitiveView, Permissions.Core.LegalEntityView, .. Permissions.Core.OrgStructureView,
         ]),
         new(Manager, "Manager", "Sees and acts on their own team within the reporting chain.", false,
         [
-            Permissions.Core.LegalEntityView,
+            Permissions.Core.LegalEntityView, .. Permissions.Core.OrgStructureView,
         ]),
         new(Employee, "Employee", "Self service only.", false, []),
         new(Auditor, "Auditor", "Read-only access for audit and compliance.", false,
         [
-            Permissions.Identity.UserView, Permissions.Identity.RoleView, Permissions.Core.LegalEntityView,
+            Permissions.Identity.UserView, Permissions.Identity.RoleView, Permissions.Core.LegalEntityView, .. Permissions.Core.OrgStructureView,
         ]),
     ];
 }

@@ -1,7 +1,9 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using FluentAssertions;
 using Hrms.Contracts;
+using Hrms.Core.Api.Org;
 using Hrms.Core.Infrastructure;
 using Hrms.Core.IntegrationTests.Core;
 using Hrms.Core.IntegrationTests.Persistence;
@@ -84,7 +86,8 @@ public sealed class TokenServerTestHost : IAsyncDisposable
     public static async Task<TokenServerTestHost> StartAsync(
         string connectionString,
         IDictionary<string, string?>? settings = null,
-        string environment = "Development")
+        string environment = "Development",
+        Action<IServiceCollection>? configureServices = null)
     {
         var clock = new MovableClock(DateTimeOffset.UtcNow);
         var configuration = TestEncryption.Settings();
@@ -111,6 +114,7 @@ public sealed class TokenServerTestHost : IAsyncDisposable
                     services.AddCoreInfrastructure(connectionString);
                     services.AddIdentityInfrastructure(connectionString);
                     services.AddIdentityServer(context.Configuration, context.HostingEnvironment);
+                    configureServices?.Invoke(services);
                 })
                 .Configure(app =>
                 {
@@ -123,6 +127,7 @@ public sealed class TokenServerTestHost : IAsyncDisposable
                     {
                         endpoints.MapTokenEndpoint();
                         endpoints.MapGroup("/api/v1").MapAccountEndpoints();
+                        endpoints.MapGroup("/api/v1").MapOrgStructureEndpoints();
                         endpoints.MapGet("/me", (HttpContext http, ITenantContext tenant) => Results.Ok(new
                         {
                             sub = http.User.FindFirst(HrmsClaims.Subject)?.Value,
@@ -194,6 +199,23 @@ public sealed class TokenServerTestHost : IAsyncDisposable
         return await Client.SendAsync(request);
     }
 
+    /// <summary>Any verb, with an optional JSON body and bearer token.</summary>
+    public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, string? bearer = null, object? body = null)
+    {
+        using var request = new HttpRequestMessage(method, path);
+        if (body is not null)
+        {
+            request.Content = JsonContent.Create(body);
+        }
+
+        if (bearer is not null)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
+        }
+
+        return await Client.SendAsync(request);
+    }
+
     public async ValueTask DisposeAsync()
     {
         Client.Dispose();
@@ -234,6 +256,37 @@ public sealed class TokenServerTestHost : IAsyncDisposable
         context.UserRoleScopes.Add(UserRoleScope.Create(user.Id, role.Id, ScopeType.Self, null).Value);
         await context.SaveChangesAsync();
         return user;
+    }
+
+    /// <summary>
+    /// An account whose only role is a fresh non-MFA role holding exactly these permissions, so a test can sign in with a token that
+    /// carries them (the default administrator roles require MFA and would only get an enrolment session).
+    /// </summary>
+    public async Task<UserAccount> AddUserWithPermissionsAsync(TenantId tenant, string email, string password, params string[] permissions)
+    {
+        var user = UserAccount.Create(email, "Test User", IdentityTestDb.FastHasher().Hash(password), DateTime.UtcNow).Value;
+        var role = Role.Create($"test_{Guid.NewGuid():N}"[..20], "Test role", "Test role", isSystem: false, requiresMfa: false).Value;
+        await using var context = IdentityTestDb.Context(ConnectionString, tenant);
+        context.Roles.Add(role);
+        foreach (var code in permissions)
+        {
+            context.RoleGrants.Add(RoleGrant.Create(role.Id, code).Value);
+        }
+
+        context.Users.Add(user);
+        context.UserRoleScopes.Add(UserRoleScope.Create(user.Id, role.Id, ScopeType.Self, null).Value);
+        await context.SaveChangesAsync();
+        return user;
+    }
+
+    /// <summary>Creates the user (see <see cref="AddUserWithPermissionsAsync"/>), signs in and returns the access token.</summary>
+    public async Task<string> TokenWithPermissionsAsync(TenantId tenant, string tenantCode, string password, params string[] permissions)
+    {
+        var email = $"u-{Guid.NewGuid():N}@example.com";
+        await AddUserWithPermissionsAsync(tenant, email, password, permissions);
+        var (status, body) = await PasswordAsync(tenantCode, email, password);
+        status.Should().Be(200, body.ToString());
+        return body.GetProperty("access_token").GetString()!;
     }
 
     public async Task<UserAccount> LoadUserAsync(TenantId tenant, Guid userId)

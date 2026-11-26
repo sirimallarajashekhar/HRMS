@@ -1,4 +1,5 @@
 using Hrms.Core.Domain.LegalEntities;
+using Hrms.Core.Domain.Org;
 using Hrms.Core.Domain.Tenants;
 using Hrms.Persistence;
 using Hrms.SharedKernel;
@@ -22,6 +23,24 @@ public sealed class CoreDbContext(
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
     public DbSet<LegalEntity> LegalEntities => Set<LegalEntity>();
+
+    public DbSet<OrgUnitType> OrgUnitTypes => Set<OrgUnitType>();
+
+    public DbSet<OrgUnit> OrgUnits => Set<OrgUnit>();
+
+    public DbSet<OrgUnitParent> OrgUnitParents => Set<OrgUnitParent>();
+
+    public DbSet<Location> Locations => Set<Location>();
+
+    public DbSet<Geofence> Geofences => Set<Geofence>();
+
+    public DbSet<Grade> Grades => Set<Grade>();
+
+    public DbSet<Designation> Designations => Set<Designation>();
+
+    public DbSet<CostCentre> CostCentres => Set<CostCentre>();
+
+    public DbSet<EmployeeType> EmployeeTypes => Set<EmployeeType>();
 
     protected override void ConfigureEntities(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(CoreDbContext).Assembly);
