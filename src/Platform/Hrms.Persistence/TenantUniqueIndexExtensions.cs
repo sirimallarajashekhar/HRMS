@@ -37,4 +37,27 @@ public static class TenantUniqueIndexExtensions
             .IsUnique()
             .HasDatabaseName($"ux_{table}_tenant_{columnName}");
     }
+
+    /// <summary>
+    /// Makes a combination of properties unique per tenant among live rows (for join tables such as role grants). A generated
+    /// column is 1 for live rows and NULL for soft-deleted ones, and it ends the unique index, so a deleted row never blocks the
+    /// same combination again. Every column in the combination must be NOT NULL, otherwise NULLs would defeat the index.
+    /// </summary>
+    public static IndexBuilder<T> HasUniqueLiveCombination<T>(
+        this EntityTypeBuilder<T> builder,
+        string indexName,
+        params string[] propertyNames)
+        where T : TenantEntity
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentException.ThrowIfNullOrWhiteSpace(indexName);
+        ArgumentNullException.ThrowIfNull(propertyNames);
+
+        builder.Property<int?>("ActiveFlag").HasComputedColumnSql("IF(`is_deleted` = 0, 1, NULL)", stored: false);
+
+        return builder
+            .HasIndex([nameof(TenantEntity.TenantId), .. propertyNames, "ActiveFlag"])
+            .IsUnique()
+            .HasDatabaseName(indexName);
+    }
 }

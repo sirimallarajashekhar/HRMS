@@ -41,3 +41,41 @@ public sealed class DenyAllTenantDirectory : ITenantDirectory
 {
     public ValueTask<bool> IsActiveAsync(Guid tenantId, CancellationToken cancellationToken) => ValueTask.FromResult(false);
 }
+
+/// <summary>
+/// Takes the tenant from the signed-in caller's token. An authenticated caller whose token has no usable tenant is Malformed, never
+/// NotProvided, so a bad token can never fall through to a less trusted source such as the development header.
+/// </summary>
+public sealed class ClaimTenantResolver : ITenantResolver
+{
+    public ValueTask<TenantResolution> ResolveAsync(HttpContext context, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.User.Identity?.IsAuthenticated != true)
+        {
+            return ValueTask.FromResult(TenantResolution.NotProvided);
+        }
+
+        var claim = context.User.FindFirst(HrmsClaims.TenantId)?.Value;
+        return ValueTask.FromResult(TenantId.TryParse(claim, out var tenantId) ? TenantResolution.Resolved(tenantId) : TenantResolution.Malformed);
+    }
+}
+
+/// <summary>
+/// The claim wins whenever there is a signed-in caller, so an authenticated request can never switch tenant with a header. Only a
+/// request without a caller may use the next resolver (the development header, when enabled).
+/// </summary>
+public sealed class CompositeTenantResolver(ITenantResolver claims, ITenantResolver? unauthenticated) : ITenantResolver
+{
+    public async ValueTask<TenantResolution> ResolveAsync(HttpContext context, CancellationToken cancellationToken)
+    {
+        var fromToken = await claims.ResolveAsync(context, cancellationToken);
+        if (fromToken.Outcome != TenantResolutionOutcome.NotProvided || unauthenticated is null)
+        {
+            return fromToken;
+        }
+
+        return await unauthenticated.ResolveAsync(context, cancellationToken);
+    }
+}

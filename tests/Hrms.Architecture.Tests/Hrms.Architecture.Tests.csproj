@@ -9,6 +9,10 @@
     <ProjectReference Include="../../src/Host/Hrms.Api/Hrms.Api.csproj" />
     <ProjectReference Include="../../src/Host/Hrms.Worker/Hrms.Worker.csproj" />
     <ProjectReference Include="../../src/Modules/Core/Api/Hrms.Core.Api.csproj" />
+    <ProjectReference Include="../../src/Modules/Identity/Api/Hrms.Identity.Api.csproj" />
+    <ProjectReference Include="../../src/Modules/Identity/Infrastructure/Hrms.Identity.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/Modules/Identity/Application/Hrms.Identity.Application.csproj" />
+    <ProjectReference Include="../../src/Modules/Identity/Domain/Hrms.Identity.Domain.csproj" />
     <ProjectReference Include="../../src/Modules/Core/Application/Hrms.Core.Application.csproj" />
     <ProjectReference Include="../../src/Modules/Core/Domain/Hrms.Core.Domain.csproj" />
     <ProjectReference Include="../../src/Modules/Core/Infrastructure/Hrms.Core.Infrastructure.csproj" />
