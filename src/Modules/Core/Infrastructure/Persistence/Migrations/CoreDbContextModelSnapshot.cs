@@ -702,6 +702,68 @@ namespace Hrms.Core.Infrastructure.Persistence.Migrations
                     b.ToTable("org_unit");
                 });
 
+            modelBuilder.Entity("Hrms.Core.Domain.Org.OrgUnitHead", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("binary(16)")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("binary(16)")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateOnly>("EffectiveFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("effective_from");
+
+                    b.Property<DateOnly?>("EffectiveTo")
+                        .HasColumnType("date")
+                        .HasColumnName("effective_to");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("binary(16)")
+                        .HasColumnName("employee_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("OrgUnitId")
+                        .HasColumnType("binary(16)")
+                        .HasColumnName("org_unit_id");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("binary(16)")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("binary(16)")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrgUnitId");
+
+                    b.HasIndex("TenantId", "OrgUnitId", "EffectiveFrom")
+                        .IsUnique()
+                        .HasDatabaseName("ux_org_unit_head_tenant_unit_from");
+
+                    b.ToTable("org_unit_head");
+                });
+
             modelBuilder.Entity("Hrms.Core.Domain.Org.OrgUnitParent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -913,6 +975,15 @@ namespace Hrms.Core.Infrastructure.Persistence.Migrations
                     b.HasOne("Hrms.Core.Domain.Org.OrgUnitType", null)
                         .WithMany()
                         .HasForeignKey("OrgUnitTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Hrms.Core.Domain.Org.OrgUnitHead", b =>
+                {
+                    b.HasOne("Hrms.Core.Domain.Org.OrgUnit", null)
+                        .WithMany()
+                        .HasForeignKey("OrgUnitId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

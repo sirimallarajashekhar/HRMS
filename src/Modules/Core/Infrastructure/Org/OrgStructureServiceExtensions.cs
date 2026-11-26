@@ -9,6 +9,8 @@ internal static class OrgStructureServiceExtensions
     {
         services.AddScoped<IOrgUnitTypeService, OrgUnitTypeService>();
         services.AddScoped<IOrgUnitService, OrgUnitService>();
+        services.AddScoped<IOrgUnitHeadService, OrgUnitHeadService>();
+        services.AddScoped<Hrms.Contracts.IOrgUnitHeadLookup, OrgUnitHeadLookup>();
         services.AddScoped<ILocationService, LocationService>();
         services.AddScoped<IGeofenceService, GeofenceService>();
         services.AddScoped<IGradeService, GradeService>();

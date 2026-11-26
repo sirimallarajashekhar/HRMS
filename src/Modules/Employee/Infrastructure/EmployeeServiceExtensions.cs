@@ -23,6 +23,7 @@ public static class EmployeeServiceExtensions
         // The real scope expander replaces the identity module's self-only default, whichever module registered first.
         services.Replace(ServiceDescriptor.Scoped<IEmployeeScopeExpander, EmployeeScopeExpander>());
         services.AddScoped<IEmployeeDirectory, EmployeeDirectory>();
+        services.AddScoped<IEmployeePositionLookup, EmployeePositionLookup>();
 
         // Core refuses to delete a master that a job period still points at.
         foreach (var kind in new[]

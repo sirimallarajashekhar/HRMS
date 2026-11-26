@@ -182,6 +182,16 @@ public static class OrgStructureEndpoints
             .RequirePermission(Permissions.Core.OrgUnitManage)
             .WithSummary("Moves the unit under another parent (null makes it a root) from a date after its current arrangement; refuses cycles. History is kept.");
 
+        group.MapGet("/{id:guid}/heads", async (Guid id, IOrgUnitHeadService service, CancellationToken ct) =>
+                (await service.HistoryAsync(id, ct)).ToHttpResult(history => Results.Ok(history)))
+            .RequirePermission(Permissions.Core.OrgUnitView)
+            .WithSummary("The heads of the unit over time, oldest first, with the rowVersion for the next change.");
+
+        group.MapPut("/{id:guid}/head", async (Guid id, ChangeOrgUnitHeadRequest? request, IOrgUnitHeadService service, CancellationToken ct) =>
+                request is null ? BodyRequired() : (await service.ChangeAsync(id, request, ct)).ToHttpResult(history => Results.Ok(history)))
+            .RequirePermission(Permissions.Core.OrgUnitManage)
+            .WithSummary("Sets who heads the unit from a date (null leaves it without a head). History is kept.");
+
         group.MapDelete("/{id:guid}", async (Guid id, IOrgUnitService service, CancellationToken ct) =>
                 (await service.DeleteAsync(id, ct)).ToHttpResult(() => Results.NoContent()))
             .RequirePermission(Permissions.Core.OrgUnitManage)

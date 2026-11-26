@@ -42,10 +42,24 @@ public static class IdentityInfrastructureExtensions
         // The employee module (P0.6) registers the real expander, which replaces this default because it is added with TryAdd here.
         services.TryAddScoped<IEmployeeScopeExpander, SelfOnlyScopeExpander>();
         services.AddScoped<IDataScopeService, DataScopeService>();
+        services.AddScoped<IApproverDirectory, ApproverDirectory>();
         services.AddScoped<OAuthClientSeeder>();
 
         // The token server stores (applications, authorizations, tokens). The server and validation halves are configured by the API layer.
         services.AddOpenIddict().AddCore(core => core.UseEntityFrameworkCore().UseDbContext<IdentityDbContext>().ReplaceDefaultEntities<Guid>());
+        return services;
+    }
+
+    /// <summary>
+    /// For a background host that only needs to ask who can approve: the Identity database and the directory, without the sign-in
+    /// services or the token stores.
+    /// </summary>
+    public static IServiceCollection AddIdentityDirectory(this IServiceCollection services, string? mysqlConnectionString)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddDbContext<IdentityDbContext>(options => UseIdentityMySql(options, mysqlConnectionString));
+        services.AddScoped<IApproverDirectory, ApproverDirectory>();
         return services;
     }
 
