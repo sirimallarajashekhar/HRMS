@@ -22,7 +22,11 @@ public sealed class IdentityServerOptions
     /// <summary>Seconds a just-used refresh token may be presented again, for a client that lost the response. 0 means never.</summary>
     public int RefreshReuseLeewaySeconds { get; init; }
 
-    public int TokenRequestsPerMinute { get; init; } = 20;
+    /// <summary>
+    /// Per client address. Deliberately generous: a whole office behind one NAT signs in within minutes at nine o clock, and the real brake
+    /// on password guessing is the per-account lockout. This limit only stops a single address from hammering the endpoint.
+    /// </summary>
+    public int TokenRequestsPerMinute { get; init; } = 300;
 
     /// <summary>Per signed-in user: the account endpoints check passwords and codes, so guessing through a stolen session is slowed too.</summary>
     public int AccountRequestsPerMinute { get; init; } = 20;

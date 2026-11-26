@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Asp.Versioning;
 using Asp.Versioning.Builder;
 using Hrms.Api;
+using Hrms.Api.Bootstrap;
 using Hrms.Api.Health;
 using Hrms.Core.Api;
 using Hrms.Core.Infrastructure;
@@ -82,6 +83,12 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+// One-off operator command: creates a tenant, its default roles and its first administrator, then exits (see BootstrapCommand).
+if (BootstrapCommand.IsRequested(args))
+{
+    return await BootstrapCommand.RunAsync(app.Services, args, Console.Out, Environment.GetEnvironmentVariable);
+}
+
 // Correlation first so the id is in the log scope for the exception handler and survives on error responses.
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseExceptionHandler();
@@ -118,6 +125,7 @@ if (!app.Environment.IsProduction())
 }
 
 await app.RunAsync();
+return 0;
 
 // Exposed for WebApplicationFactory in integration tests.
 public partial class Program;
