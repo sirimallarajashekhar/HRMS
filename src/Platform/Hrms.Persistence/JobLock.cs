@@ -15,7 +15,7 @@ public interface IJobLock
 
 internal sealed class MySqlJobLock(DbDataSource dataSource) : IJobLock
 {
-    private const int MaxNameLength = 48;
+    private const int MaxNameLength = 100;
 
     public async Task<IAsyncDisposable?> TryAcquireAsync(string name, CancellationToken cancellationToken)
     {
@@ -30,7 +30,8 @@ internal sealed class MySqlJobLock(DbDataSource dataSource) : IJobLock
         {
             // The database name is part of the lock name, so two databases on one server never block each other.
             await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT GET_LOCK(CONCAT(DATABASE(), ':', @name), 0)";
+            // Hashed so any database name plus lock name fits MySQL's 64 character limit for lock names.
+            command.CommandText = "SELECT GET_LOCK(SHA2(CONCAT(DATABASE(), ':', @name), 256), 0)";
             var parameter = command.CreateParameter();
             parameter.ParameterName = "@name";
             parameter.Value = name;
@@ -59,7 +60,7 @@ internal sealed class MySqlJobLock(DbDataSource dataSource) : IJobLock
             try
             {
                 await using var command = connection.CreateCommand();
-                command.CommandText = "SELECT RELEASE_LOCK(CONCAT(DATABASE(), ':', @name))";
+                command.CommandText = "SELECT RELEASE_LOCK(SHA2(CONCAT(DATABASE(), ':', @name), 256))";
                 var parameter = command.CreateParameter();
                 parameter.ParameterName = "@name";
                 parameter.Value = name;

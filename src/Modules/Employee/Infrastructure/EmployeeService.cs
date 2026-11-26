@@ -106,6 +106,15 @@ internal sealed class EmployeeService(
             units = query.IncludeSubUnits ? await org.GetOrgUnitSubtreeAsync(unit, asOf, cancellationToken) : new HashSet<Guid> { unit };
         }
 
+        // The common case (no search and no filter on job data) needs no join to count or to find the page: the page comes straight from the
+        // unique code index, and names and jobs are fetched for just those rows. This is what keeps the default list fast at 20,000 employees.
+        var needsJoin = !string.IsNullOrWhiteSpace(query.Search) || query.LegalEntityId is not null || query.LocationId is not null || units is not null
+                        || query.DesignationId is not null || query.GradeId is not null || query.EmployeeTypeId is not null || query.ManagerId is not null;
+        if (!needsJoin)
+        {
+            return await ListWithoutJoinsAsync(visibility.Value, status, page, pageSize, today, asOf, cancellationToken);
+        }
+
         var rows =
             from e in EmployeeAccess.Apply(db.Employees.AsNoTracking(), visibility.Value)
             join p in db.Personal.AsNoTracking() on e.Id equals p.EmployeeId into people
@@ -202,6 +211,41 @@ internal sealed class EmployeeService(
                 r.EmployeeTypeId!.Value, r.GradeId, r.CostCentreId, r.ManagerId, r.ProbationEnd, r.NoticePeriodDays!.Value, EnumText.Camel(r.Reason!.Value)),
             r.RowVersion)).ToList();
 
+        return Result.Success(new PagedResult<EmployeeSummaryView>(items, page, pageSize, total));
+    }
+
+    private async Task<Result<PagedResult<EmployeeSummaryView>>> ListWithoutJoinsAsync(
+        Visibility visibility, string status, int page, int pageSize, DateOnly today, DateOnly asOf, CancellationToken cancellationToken)
+    {
+        var employees = EmployeeAccess.Apply(db.Employees.AsNoTracking(), visibility);
+        employees = status switch
+        {
+            "active" => employees.Where(e => e.JoiningDate <= today && (e.LastWorkingDay == null || e.LastWorkingDay >= today)),
+            "separated" => employees.Where(e => e.LastWorkingDay != null && e.LastWorkingDay < today),
+            "notjoined" => employees.Where(e => e.JoiningDate > today),
+            _ => employees,
+        };
+
+        var total = await employees.LongCountAsync(cancellationToken);
+
+        // For live rows the generated active_code equals code, and the unique index on it hands the rows over already sorted.
+        var pageEmployees = await employees
+            .OrderBy(e => EF.Property<string>(e, "ActiveCode"))
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        var ids = pageEmployees.Select(e => e.Id).ToList();
+        var names = await db.Personal.AsNoTracking().Where(p => ids.Contains(p.EmployeeId))
+            .Select(p => new { p.EmployeeId, p.FirstName, p.LastName }).ToDictionaryAsync(p => p.EmployeeId, cancellationToken);
+        var jobs = (await db.Jobs.AsNoTracking().ValidOn(asOf).Where(j => ids.Contains(j.EmployeeId)).ToListAsync(cancellationToken))
+            .ToDictionary(j => j.EmployeeId);
+
+        var items = pageEmployees.Select(e => Views.Summary(
+            e,
+            names.TryGetValue(e.Id, out var name) ? DisplayName(name.FirstName, name.LastName) : string.Empty,
+            jobs.GetValueOrDefault(e.Id),
+            today)).ToList();
         return Result.Success(new PagedResult<EmployeeSummaryView>(items, page, pageSize, total));
     }
 
