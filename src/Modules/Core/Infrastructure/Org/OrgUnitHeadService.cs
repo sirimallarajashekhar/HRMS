@@ -134,3 +134,12 @@ internal sealed class OrgUnitHeadLookup(CoreDbContext db) : IOrgUnitHeadLookup
         return path.ConvertAll(id => new OrgUnitHeadLink(id, types[id], heads.TryGetValue(id, out var head) ? head : null));
     }
 }
+
+/// <summary>
+/// The default until the employee module registers the real directory, which replaces it in either order: no employee exists, so no
+/// unit can be given a head. It keeps a host that loads Core without the employee module able to start.
+/// </summary>
+internal sealed class NoEmployeeDirectoryForCore : IEmployeeDirectory
+{
+    public Task<bool> ExistsAsync(Guid employeeId, CancellationToken cancellationToken) => Task.FromResult(false);
+}
