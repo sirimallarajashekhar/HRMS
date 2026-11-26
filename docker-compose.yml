@@ -108,6 +108,10 @@ services:
       ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD}"
       ConnectionStrings__RabbitMq: "amqp://${RABBITMQ_USER:-hrms}:${RABBITMQ_PASSWORD}@rabbitmq:5672"
       Seq__ServerUrl: http://seq:5341
+      # A key with id "dev" is accepted only in Development. Put a generated key in .env (see .env.example).
+      Encryption__CurrentKeyId: dev
+      Encryption__Keys__0__Id: dev
+      Encryption__Keys__0__Key: "${ENCRYPTION_KEY:-}"
     ports:
       - "127.0.0.1:${API_PORT:-8080}:8080"
     depends_on:

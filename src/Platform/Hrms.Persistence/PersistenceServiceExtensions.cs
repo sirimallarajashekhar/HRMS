@@ -1,6 +1,9 @@
 using System.Data.Common;
+using Hrms.Persistence.Security;
 using Hrms.Persistence.Sql;
+using Hrms.SharedKernel;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using MySqlConnector;
 
 namespace Hrms.Persistence;
@@ -21,6 +24,12 @@ public static class PersistenceServiceExtensions
             : new MySqlDataSourceBuilder(MySqlConnectionStrings.ForHrms(mysqlConnectionString)).Build());
 
         services.AddScoped<TenantDbConnectionFactory>();
+
+        // Field encryption for sensitive values. The host refuses to start without a valid key (and without the dev key being absent in
+        // production), so a value is never stored unencrypted because a key was forgotten.
+        services.AddOptions<FieldEncryptionOptions>().BindConfiguration(FieldEncryptionOptions.SectionName).ValidateOnStart();
+        services.AddSingleton<IValidateOptions<FieldEncryptionOptions>, FieldEncryptionOptionsValidator>();
+        services.AddSingleton<IFieldEncryptor, AesGcmFieldEncryptor>();
         return services;
     }
 }

@@ -1,3 +1,4 @@
+using Hrms.Core.IntegrationTests.Identity;
 using Microsoft.AspNetCore.Hosting;
 using System.Net;
 using System.Net.Http.Json;
@@ -48,7 +49,7 @@ public class ApiHostTests(WebApplicationFactory<Program> factory) : IClassFixtur
     [Fact]
     public async Task OpenApi_Document_IsNotServedInProduction()
     {
-        using var production = factory.WithWebHostBuilder(builder => builder.UseEnvironment("Production"));
+        using var production = factory.WithWebHostBuilder(builder => builder.UseProductionWithCertificates());
         using var client = production.CreateClient();
 
         var response = await client.GetAsync("/openapi/v1.json");

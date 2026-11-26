@@ -11,7 +11,7 @@ namespace Hrms.Core.IntegrationTests;
 public sealed class MySqlFixture : IAsyncLifetime
 {
     private readonly MySqlContainer _container = new MySqlBuilder("mysql:8.4")
-        .WithCommand("--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci", "--default-time-zone=+00:00")
+        .WithCommand("--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci", "--default-time-zone=+00:00", "--max-connections=1000")
         .Build();
 
     public string ConnectionString => _container.GetConnectionString();

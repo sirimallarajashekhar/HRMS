@@ -1,4 +1,5 @@
 using Hrms.Contracts;
+using Hrms.Core.Infrastructure.Org;
 using Hrms.Core.Infrastructure.Persistence;
 using Hrms.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -21,6 +22,8 @@ public static class CoreInfrastructureExtensions
 
         services.AddDbContext<CoreDbContext>(options => UseCoreMySql(options, mysqlConnectionString));
         services.AddScoped<ITenantDirectory, TenantDirectory>();
+        services.AddScoped<ITenantLookup, TenantDirectory>();
+        services.AddOrgStructure();
         return services;
     }
 

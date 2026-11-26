@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Modules/Identity/Domain/Hrms.Identity.Domain.csproj" />
+    <ProjectReference Include="../../src/Contracts/Hrms.Contracts/Hrms.Contracts.csproj" />
+    <ProjectReference Include="../../src/Modules/Identity/Application/Hrms.Identity.Application.csproj" />
+    <ProjectReference Include="../../src/Modules/Identity/Infrastructure/Hrms.Identity.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/SharedKernel/Hrms.SharedKernel/Hrms.SharedKernel.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="GitHubActionsTestLogger" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>

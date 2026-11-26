@@ -1,4 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- The ASP.NET route-handler analyzer throws a NullReferenceException on the generic endpoint mapper in Org/OrgStructureEndpoints.cs
+         (AD0001 is a crash of the analyzer, not a finding). Remove this when the analyzer is fixed; every endpoint is covered by integration tests. -->
+    <NoWarn>$(NoWarn);AD0001</NoWarn>
+  </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../Application/Hrms.Core.Application.csproj" />
