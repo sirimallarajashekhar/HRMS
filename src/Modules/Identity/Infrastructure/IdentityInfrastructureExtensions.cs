@@ -5,6 +5,7 @@ using Hrms.Identity.Infrastructure.Security;
 using Hrms.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace Hrms.Identity.Infrastructure;
@@ -35,6 +36,10 @@ public static class IdentityInfrastructureExtensions
         services.AddScoped<SecurityPolicyReader>();
         services.AddScoped<IPasswordSignInService, PasswordSignInService>();
         services.AddScoped<IAccountService, AccountService>();
+
+        // The employee module (P0.6) registers the real expander, which replaces this default because it is added with TryAdd here.
+        services.TryAddScoped<IEmployeeScopeExpander, SelfOnlyScopeExpander>();
+        services.AddScoped<IDataScopeService, DataScopeService>();
         services.AddScoped<OAuthClientSeeder>();
 
         // The token server stores (applications, authorizations, tokens). The server and validation halves are configured by the API layer.

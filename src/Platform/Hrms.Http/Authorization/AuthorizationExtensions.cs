@@ -34,6 +34,8 @@ public static class AuthorizationExtensions
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, ProblemAuthorizationResultHandler>();
         services.TryAddScoped<IPermissionStore, DenyAllPermissionStore>();
+        services.AddHttpContextAccessor();
+        services.AddScoped<ISensitiveDataAccess, HttpSensitiveDataAccess>();
         return services;
     }
 
