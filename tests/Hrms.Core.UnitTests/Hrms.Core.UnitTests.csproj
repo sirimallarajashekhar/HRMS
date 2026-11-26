@@ -6,6 +6,8 @@
   <ItemGroup>
     <ProjectReference Include="../../src/SharedKernel/Hrms.SharedKernel/Hrms.SharedKernel.csproj" />
     <ProjectReference Include="../../src/Modules/Core/Domain/Hrms.Core.Domain.csproj" />
+    <ProjectReference Include="../../src/Platform/Hrms.Logging/Hrms.Logging.csproj" />
+    <ProjectReference Include="../../src/Platform/Hrms.Persistence/Hrms.Persistence.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FluentAssertions" />

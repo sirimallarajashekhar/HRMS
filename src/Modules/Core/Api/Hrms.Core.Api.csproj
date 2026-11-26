@@ -3,5 +3,6 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../Application/Hrms.Core.Application.csproj" />
     <ProjectReference Include="../../../Contracts/Hrms.Contracts/Hrms.Contracts.csproj" />
+    <ProjectReference Include="../../../Platform/Hrms.Http/Hrms.Http.csproj" />
   </ItemGroup>
 </Project>

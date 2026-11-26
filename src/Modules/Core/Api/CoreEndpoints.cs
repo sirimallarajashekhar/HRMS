@@ -1,4 +1,5 @@
 using Hrms.Contracts;
+using Hrms.Http.Tenancy;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -13,7 +14,8 @@ public static class CoreEndpoints
         routes.MapGet("/ping", (TimeProvider time) => TypedResults.Ok(new PingResponse("ok", time.GetUtcNow())))
             .WithName("Ping")
             .WithSummary("Liveness probe for the versioned API surface.")
-            .AllowAnonymous();
+            .AllowAnonymous()
+            .AllowWithoutTenant();
 
         return routes;
     }

@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Hrms.SharedKernel;
 
-namespace Hrms.Core.UnitTests;
+namespace Hrms.SharedKernel.UnitTests;
 
 public class ResultTests
 {

@@ -1,11 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <ItemGroup>
     <ProjectReference Include="../../Modules/Core/Api/Hrms.Core.Api.csproj" />
+    <ProjectReference Include="../../Modules/Core/Infrastructure/Hrms.Core.Infrastructure.csproj" />
+    <ProjectReference Include="../../Platform/Hrms.Http/Hrms.Http.csproj" />
+    <ProjectReference Include="../../Platform/Hrms.Logging/Hrms.Logging.csproj" />
     <ProjectReference Include="../../SharedKernel/Hrms.SharedKernel/Hrms.SharedKernel.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Asp.Versioning.Http" />
     <PackageReference Include="Asp.Versioning.Mvc.ApiExplorer" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="Asp.Versioning.OpenApi" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="MySqlConnector" />

@@ -2,5 +2,10 @@
   <ItemGroup>
     <ProjectReference Include="../Application/Hrms.Core.Application.csproj" />
     <ProjectReference Include="../Domain/Hrms.Core.Domain.csproj" />
+    <ProjectReference Include="../../../Contracts/Hrms.Contracts/Hrms.Contracts.csproj" />
+    <ProjectReference Include="../../../Platform/Hrms.Persistence/Hrms.Persistence.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" />
   </ItemGroup>
 </Project>
