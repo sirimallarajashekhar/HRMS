@@ -5,23 +5,22 @@ namespace Hrms.Employee.Domain;
 
 /// <summary>
 /// A national or statutory id (PAN, Aadhaar, SSN... the kinds come from the country pack). The value is stored encrypted, bound to this
-/// row, field and tenant; only the last four characters stay readable so a masked value can be shown without decrypting.
+/// row, field and tenant, and nothing about it is kept in the clear: masked views decrypt and mask, so even a very short id is never exposed.
 /// </summary>
 public sealed partial class StatutoryId : TenantEntity
 {
     public const int IdTypeMaxLength = 32;
     public const int ValueMaxLength = 64;
 
-    private StatutoryId(Guid employeeId, string idType, string protectedValue, string lastFour)
+    private StatutoryId(Guid employeeId, string idType, string protectedValue)
     {
         EmployeeId = employeeId;
         IdType = idType;
         ProtectedValue = protectedValue;
-        LastFour = lastFour;
     }
 
     /// <summary>For the persistence layer only.</summary>
-    private StatutoryId() => IdType = ProtectedValue = LastFour = string.Empty;
+    private StatutoryId() => IdType = ProtectedValue = string.Empty;
 
     public Guid EmployeeId { get; private set; }
 
@@ -30,8 +29,6 @@ public sealed partial class StatutoryId : TenantEntity
 
     /// <summary>The encrypted value (see IFieldEncryptor); never the plaintext.</summary>
     public string ProtectedValue { get; private set; }
-
-    public string LastFour { get; private set; }
 
     public static Result<string> NormaliseType(string? idType)
     {
@@ -50,15 +47,10 @@ public sealed partial class StatutoryId : TenantEntity
             : Result.Success(normalised);
     }
 
-    public static StatutoryId Create(Guid employeeId, string normalisedType, string normalisedValue, string protectedValue) =>
-        new(employeeId, normalisedType, protectedValue, normalisedValue.Length <= 4 ? normalisedValue : normalisedValue[^4..]);
+    public static StatutoryId Create(Guid employeeId, string normalisedType, string protectedValue) => new(employeeId, normalisedType, protectedValue);
 
     /// <summary>Replaces the value (already normalised and encrypted by the caller).</summary>
-    public void Replace(string normalisedValue, string protectedValue)
-    {
-        ProtectedValue = protectedValue;
-        LastFour = normalisedValue.Length <= 4 ? normalisedValue : normalisedValue[^4..];
-    }
+    public void Replace(string protectedValue) => ProtectedValue = protectedValue;
 
     [GeneratedRegex("^[A-Z0-9_]{1,32}$")]
     private static partial Regex TypePattern();

@@ -510,16 +510,15 @@ public class SupportingRecordTests
     private static readonly DateTime Now = new(2026, 11, 26, 9, 0, 0, DateTimeKind.Utc);
 
     [Fact]
-    public void StatutoryId_NormalisesTypeAndValue_AndKeepsOnlyTheLastFour()
+    public void StatutoryId_NormalisesTypeAndValue_AndKeepsNothingInTheClear()
     {
         var type = StatutoryId.NormaliseType(" pan ").Value;
         var value = StatutoryId.NormaliseValue("abcde 1234 f").Value;
 
-        var id = StatutoryId.Create(Employee, type, value, "v1.dev.cipher");
+        var id = StatutoryId.Create(Employee, type, "v1.dev.cipher");
 
         type.Should().Be("PAN");
         value.Should().Be("ABCDE1234F");
-        id.LastFour.Should().Be("234F");
         id.ProtectedValue.Should().Be("v1.dev.cipher");
         id.ProtectedValue.Should().NotContain("ABCDE");
     }
@@ -534,9 +533,9 @@ public class SupportingRecordTests
     }
 
     [Fact]
-    public void StatutoryId_ShortValues_AreKeptWhole_AndEmptyOnesRefused()
+    public void StatutoryId_EmptyOrOverlongValues_AreRefused()
     {
-        StatutoryId.Create(Employee, "X", "12", "cipher").LastFour.Should().Be("12");
+        StatutoryId.NormaliseValue("12").Value.Should().Be("12");
         StatutoryId.NormaliseValue("   ").Error.Code.Should().Be("employee.statutory_id.value_invalid");
         StatutoryId.NormaliseValue(new string('1', 65)).Error.Code.Should().Be("employee.statutory_id.value_invalid");
     }

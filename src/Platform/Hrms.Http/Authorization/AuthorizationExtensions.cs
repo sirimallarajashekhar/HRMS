@@ -1,6 +1,8 @@
 using Hrms.Contracts;
+using Hrms.SharedKernel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
@@ -36,6 +38,10 @@ public static class AuthorizationExtensions
         services.TryAddScoped<IPermissionStore, DenyAllPermissionStore>();
         services.AddHttpContextAccessor();
         services.AddScoped<ISensitiveDataAccess, HttpSensitiveDataAccess>();
+        // The signed-in user becomes the audit actor (replaces the system default registered with tenancy).
+        services.AddScoped<HttpActorContext>();
+        services.Replace(ServiceDescriptor.Scoped<IActorContext>(sp => sp.GetRequiredService<HttpActorContext>()));
+        services.AddScoped<ICurrentUser>(sp => sp.GetRequiredService<HttpActorContext>());
         return services;
     }
 
