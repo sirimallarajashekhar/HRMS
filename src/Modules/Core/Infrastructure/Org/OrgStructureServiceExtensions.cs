@@ -15,6 +15,7 @@ internal static class OrgStructureServiceExtensions
         services.AddScoped<IDesignationService, DesignationService>();
         services.AddScoped<ICostCentreService, CostCentreService>();
         services.AddScoped<IEmployeeTypeService, EmployeeTypeService>();
+        services.AddScoped<Hrms.Contracts.IOrgStructureLookup, OrgStructureLookup>();
         return services;
     }
 }

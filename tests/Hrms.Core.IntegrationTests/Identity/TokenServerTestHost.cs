@@ -4,6 +4,9 @@ using System.Text.Json;
 using FluentAssertions;
 using Hrms.Contracts;
 using Hrms.Core.Api.Org;
+using Hrms.Employee.Api;
+using Hrms.Employee.Infrastructure;
+using Hrms.Core.IntegrationTests.Employee;
 using Hrms.Core.Infrastructure;
 using Hrms.Core.IntegrationTests.Core;
 using Hrms.Core.IntegrationTests.Persistence;
@@ -80,6 +83,11 @@ public sealed class TokenServerTestHost : IAsyncDisposable
             await identity.Database.MigrateAsync();
         }
 
+        await using (var employee = EmployeeTestDb.Context(admin.ConnectionString, tenant: null))
+        {
+            await employee.Database.MigrateAsync();
+        }
+
         return admin.ConnectionString;
     }
 
@@ -113,6 +121,7 @@ public sealed class TokenServerTestHost : IAsyncDisposable
                     services.AddHrmsPersistence(connectionString);
                     services.AddCoreInfrastructure(connectionString);
                     services.AddIdentityInfrastructure(connectionString);
+                    services.AddEmployeeInfrastructure(connectionString);
                     services.AddIdentityServer(context.Configuration, context.HostingEnvironment);
                     configureServices?.Invoke(services);
                 })
@@ -128,6 +137,8 @@ public sealed class TokenServerTestHost : IAsyncDisposable
                         endpoints.MapTokenEndpoint();
                         endpoints.MapGroup("/api/v1").MapAccountEndpoints();
                         endpoints.MapGroup("/api/v1").MapOrgStructureEndpoints();
+                        endpoints.MapGroup("/api/v1").MapEmployeeEndpoints();
+                        endpoints.MapGroup("/api/v1").MapUserEndpoints();
                         endpoints.MapGet("/me", (HttpContext http, ITenantContext tenant) => Results.Ok(new
                         {
                             sub = http.User.FindFirst(HrmsClaims.Subject)?.Value,
@@ -262,7 +273,11 @@ public sealed class TokenServerTestHost : IAsyncDisposable
     /// An account whose only role is a fresh non-MFA role holding exactly these permissions, so a test can sign in with a token that
     /// carries them (the default administrator roles require MFA and would only get an enrolment session).
     /// </summary>
-    public async Task<UserAccount> AddUserWithPermissionsAsync(TenantId tenant, string email, string password, params string[] permissions)
+    public Task<UserAccount> AddUserWithPermissionsAsync(TenantId tenant, string email, string password, params string[] permissions) =>
+        AddUserWithScopeAsync(tenant, email, password, ScopeType.Self, null, permissions);
+
+    /// <summary>Like <see cref="AddUserWithPermissionsAsync"/>, with the data scope the role carries (tenant-wide, a department, direct reports...).</summary>
+    public async Task<UserAccount> AddUserWithScopeAsync(TenantId tenant, string email, string password, ScopeType scope, Guid? scopeValue, string[] permissions)
     {
         var user = UserAccount.Create(email, "Test User", IdentityTestDb.FastHasher().Hash(password), DateTime.UtcNow).Value;
         var role = Role.Create($"test_{Guid.NewGuid():N}"[..20], "Test role", "Test role", isSystem: false, requiresMfa: false).Value;
@@ -274,8 +289,9 @@ public sealed class TokenServerTestHost : IAsyncDisposable
         }
 
         context.Users.Add(user);
-        context.UserRoleScopes.Add(UserRoleScope.Create(user.Id, role.Id, ScopeType.Self, null).Value);
+        context.UserRoleScopes.Add(UserRoleScope.Create(user.Id, role.Id, scope, scopeValue).Value);
         await context.SaveChangesAsync();
+        _host.Services.GetRequiredService<Hrms.Identity.Infrastructure.Security.PermissionCache>().Invalidate(tenant.Value); // a new role must be visible at once
         return user;
     }
 
@@ -287,6 +303,22 @@ public sealed class TokenServerTestHost : IAsyncDisposable
         var (status, body) = await PasswordAsync(tenantCode, email, password);
         status.Should().Be(200, body.ToString());
         return body.GetProperty("access_token").GetString()!;
+    }
+
+    /// <summary>Creates a user whose role carries the given scope, optionally linked to an employee, signs in and returns the token and the user id.</summary>
+    public async Task<(string Token, Guid UserId)> TokenWithScopeAsync(
+        TenantId tenant, string tenantCode, string password, ScopeType scope, Guid? scopeValue, Guid? employeeId, params string[] permissions)
+    {
+        var email = $"u-{Guid.NewGuid():N}@example.com";
+        var user = await AddUserWithScopeAsync(tenant, email, password, scope, scopeValue, permissions);
+        if (employeeId is not null)
+        {
+            await UpdateUserAsync(tenant, user.Id, u => u.LinkEmployee(employeeId));
+        }
+
+        var (status, body) = await PasswordAsync(tenantCode, email, password);
+        status.Should().Be(200, body.ToString());
+        return (body.GetProperty("access_token").GetString()!, user.Id);
     }
 
     public async Task<UserAccount> LoadUserAsync(TenantId tenant, Guid userId)

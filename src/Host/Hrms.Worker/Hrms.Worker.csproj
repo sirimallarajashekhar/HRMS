@@ -4,6 +4,10 @@
     <PackageReference Include="Serilog.Sinks.Seq" />
     <ProjectReference Include="../../SharedKernel/Hrms.SharedKernel/Hrms.SharedKernel.csproj" />
     <ProjectReference Include="../../Platform/Hrms.Logging/Hrms.Logging.csproj" />
+    <ProjectReference Include="../../Platform/Hrms.Persistence/Hrms.Persistence.csproj" />
+    <ProjectReference Include="../../Modules/Core/Infrastructure/Hrms.Core.Infrastructure.csproj" />
+    <ProjectReference Include="../../Modules/Employee/Infrastructure/Hrms.Employee.Infrastructure.csproj" />
+    <ProjectReference Include="../../Contracts/Hrms.Contracts/Hrms.Contracts.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />

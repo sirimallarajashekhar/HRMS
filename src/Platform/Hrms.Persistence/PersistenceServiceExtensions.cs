@@ -24,6 +24,7 @@ public static class PersistenceServiceExtensions
             : new MySqlDataSourceBuilder(MySqlConnectionStrings.ForHrms(mysqlConnectionString)).Build());
 
         services.AddScoped<TenantDbConnectionFactory>();
+        services.AddSingleton<IJobLock, MySqlJobLock>();
 
         // Field encryption for sensitive values. The host refuses to start without a valid key (and without the dev key being absent in
         // production), so a value is never stored unencrypted because a key was forgotten.

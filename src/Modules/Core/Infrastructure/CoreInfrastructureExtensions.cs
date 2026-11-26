@@ -24,6 +24,7 @@ public static class CoreInfrastructureExtensions
         services.AddScoped<ITenantDirectory, TenantDirectory>();
         services.AddScoped<ITenantLookup, TenantDirectory>();
         services.AddOrgStructure();
+        services.AddScoped<IActiveTenantSource, ActiveTenantSource>();
         return services;
     }
 

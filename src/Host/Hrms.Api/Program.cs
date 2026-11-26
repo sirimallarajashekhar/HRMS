@@ -8,6 +8,8 @@ using Hrms.Api.Health;
 using Hrms.Core.Api;
 using Hrms.Core.Api.Org;
 using Hrms.Core.Infrastructure;
+using Hrms.Employee.Api;
+using Hrms.Employee.Infrastructure;
 using Hrms.Identity.Api;
 using Hrms.Identity.Infrastructure;
 using Hrms.Persistence;
@@ -72,6 +74,7 @@ builder.Services.AddHrmsPersistence(mysqlConnectionString);
 // After AddHrmsTenancy so the real tenant directory replaces its deny-all default.
 builder.Services.AddCoreInfrastructure(mysqlConnectionString);
 builder.Services.AddIdentityInfrastructure(mysqlConnectionString);
+builder.Services.AddEmployeeInfrastructure(mysqlConnectionString);
 builder.Services.AddIdentityServer(builder.Configuration, builder.Environment);
 
 // Deny by default. Real JWT authentication replaces the placeholder scheme when the token server is wired in.
@@ -112,6 +115,8 @@ var v1 = app.MapGroup("/api/v{version:apiVersion}").WithApiVersionSet(versionSet
 v1.MapCoreEndpoints();
 v1.MapOrgStructureEndpoints();
 v1.MapAccountEndpoints();
+v1.MapUserEndpoints();
+v1.MapEmployeeEndpoints();
 
 // The OAuth token endpoint lives outside /api/v1: it is part of the OAuth protocol, not of the versioned API.
 app.MapTokenEndpoint();
