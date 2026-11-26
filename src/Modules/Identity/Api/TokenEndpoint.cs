@@ -100,7 +100,8 @@ public static class TokenEndpoint
         if (user.EnrollmentOnly)
         {
             // Password right, MFA mandatory but not set up: an enrolment-only session (no roles, no refresh token).
-            return SignIn(BuildPrincipal(user.UserId.ToString("D"), user.TenantId, [], user.SecurityStamp, [MfaSetupScope]));
+            return SignIn(BuildPrincipal(
+                user.UserId.ToString("D"), user.TenantId, [], user.SecurityStamp, [MfaSetupScope], HrmsClaims.MfaSetupSession));
         }
 
         return SignIn(BuildPrincipal(user.UserId.ToString("D"), user.TenantId, user.RoleCodes, user.SecurityStamp, request.GetScopes()));
@@ -150,7 +151,7 @@ public static class TokenEndpoint
     }
 
     private static ClaimsPrincipal BuildPrincipal(
-        string subject, Guid tenantId, IReadOnlyList<string> roles, string? stamp, IEnumerable<string> scopes)
+        string subject, Guid tenantId, IReadOnlyList<string> roles, string? stamp, IEnumerable<string> scopes, string? sessionKind = null)
     {
         var identity = new ClaimsIdentity(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, Claims.Name, Claims.Role);
         identity.AddClaim(new Claim(Claims.Subject, subject));
@@ -158,6 +159,11 @@ public static class TokenEndpoint
         foreach (var role in roles)
         {
             identity.AddClaim(new Claim(Claims.Role, role));
+        }
+
+        if (sessionKind is not null)
+        {
+            identity.AddClaim(new Claim(HrmsClaims.SessionKind, sessionKind));
         }
 
         if (stamp is not null)

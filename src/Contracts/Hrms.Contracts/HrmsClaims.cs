@@ -11,4 +11,12 @@ public static class HrmsClaims
 
     /// <summary>One claim per role code held by the user.</summary>
     public const string Role = "role";
+
+    /// <summary>
+    /// Present only on a limited session. <see cref="MfaSetupSession"/> marks someone who gave the right password but must still set up
+    /// MFA: such a token is refused everywhere except endpoints that opt in.
+    /// </summary>
+    public const string SessionKind = "hrms_session";
+
+    public const string MfaSetupSession = "mfa_setup";
 }

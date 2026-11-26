@@ -145,6 +145,11 @@ public sealed class TokenServerTestHost : IAsyncDisposable
                             tenant = tenant.TenantId?.ToString(),
                             roles = http.User.FindAll(HrmsClaims.Role).Select(c => c.Value).Order().ToArray(),
                         })).AllowAnyAuthenticatedUser();
+                        // The same answer on an endpoint that, like MFA set-up, admits the limited session.
+                        endpoints.MapGet("/me/limited", (HttpContext http) => Results.Ok(new
+                        {
+                            roles = http.User.FindAll(HrmsClaims.Role).Select(c => c.Value).Order().ToArray(),
+                        })).AllowAnyAuthenticatedUser().AllowMfaSetupSession();
                         endpoints.MapGet("/legal-entities", async (Hrms.Core.Infrastructure.Persistence.CoreDbContext db, CancellationToken ct) =>
                             Results.Ok(await db.LegalEntities.AsNoTracking().OrderBy(e => e.Code).Select(e => e.Code).ToListAsync(ct)))
                             .RequirePermission(Permissions.Core.LegalEntityView);

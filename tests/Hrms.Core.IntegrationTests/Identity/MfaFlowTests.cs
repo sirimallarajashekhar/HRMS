@@ -133,7 +133,9 @@ public class MfaFlowTests(MySqlFixture mysql) : IAsyncLifetime
         withOffline.Body.TryGetProperty("refresh_token", out _).Should().BeFalse("asking for offline_access does not unlock a refresh token");
 
         var token = Str(body, "access_token");
-        using var me = await _host.GetAsync("/me", token);
+        using var signedInOnly = await _host.GetAsync("/me", token);
+        signedInOnly.StatusCode.Should().Be(HttpStatusCode.Forbidden, "only the password has been proved, so 'any signed-in user' does not include this session");
+        using var me = await _host.GetAsync("/me/limited", token);
         JsonDocument.Parse(await me.Content.ReadAsStringAsync()).RootElement.GetProperty("roles").GetArrayLength().Should().Be(0);
         using var data = await _host.GetAsync("/legal-entities", token);
         data.StatusCode.Should().Be(HttpStatusCode.Forbidden, "the session carries no permissions");
