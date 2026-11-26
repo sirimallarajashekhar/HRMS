@@ -523,6 +523,9 @@ namespace Hrms.Identity.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
+                    b.HasIndex("TenantId", "ScopeType", "ScopeValue")
+                        .HasDatabaseName("ix_user_role_scope_tenant_scope");
+
                     b.HasIndex("TenantId", "UserId", "RoleId", "ScopeType", "ScopeValue", "ActiveFlag")
                         .IsUnique()
                         .HasDatabaseName("ux_user_role_scope_tenant_grant");

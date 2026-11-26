@@ -28,6 +28,8 @@ public static class DefaultRoles
             Permissions.Identity.SensitiveView, Permissions.Core.LegalEntityView, Permissions.Core.LegalEntityManage,
             .. Permissions.Core.OrgStructureView, .. Permissions.Core.OrgStructureManage,
             .. Permissions.Employee.ReadAll, .. Permissions.Employee.ManageAll,
+            Permissions.Workflow.DefinitionView, Permissions.Workflow.DefinitionManage, Permissions.Workflow.InstanceView,
+            Permissions.Workflow.InstanceManage, Permissions.Workflow.DelegationManage,
         ]),
         new(PayrollAdmin, "Payroll administrator", "Runs payroll and can see sensitive pay fields.", true,
         [
@@ -41,6 +43,7 @@ public static class DefaultRoles
         new(Auditor, "Auditor", "Read-only access for audit and compliance.", false,
         [
             Permissions.Identity.UserView, Permissions.Identity.RoleView, Permissions.Core.LegalEntityView, .. Permissions.Core.OrgStructureView, .. Permissions.Employee.ReadAll,
+            Permissions.Workflow.DefinitionView, Permissions.Workflow.InstanceView,
         ]),
     ];
 }

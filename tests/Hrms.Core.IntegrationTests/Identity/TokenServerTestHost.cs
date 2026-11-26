@@ -21,6 +21,9 @@ using Hrms.Identity.Infrastructure.Persistence;
 using Hrms.Identity.Infrastructure.Security;
 using Hrms.Persistence;
 using Hrms.SharedKernel;
+using Hrms.Core.IntegrationTests.Workflow;
+using Hrms.Workflow.Api;
+using Hrms.Workflow.Infrastructure;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -83,6 +86,11 @@ public sealed class TokenServerTestHost : IAsyncDisposable
             await identity.Database.MigrateAsync();
         }
 
+        await using (var workflow = WorkflowTestDb.Context(admin.ConnectionString, tenant: null))
+        {
+            await workflow.Database.MigrateAsync();
+        }
+
         await using (var employee = EmployeeTestDb.Context(admin.ConnectionString, tenant: null))
         {
             await employee.Database.MigrateAsync();
@@ -122,6 +130,9 @@ public sealed class TokenServerTestHost : IAsyncDisposable
                     services.AddCoreInfrastructure(connectionString);
                     services.AddIdentityInfrastructure(connectionString);
                     services.AddEmployeeInfrastructure(connectionString);
+                    services.AddWorkflowInfrastructure(connectionString);
+                    services.AddWorkflowProcessingServices();
+                    TestWorkflows.Register(services);
                     services.AddIdentityServer(context.Configuration, context.HostingEnvironment);
                     configureServices?.Invoke(services);
                 })
@@ -139,12 +150,18 @@ public sealed class TokenServerTestHost : IAsyncDisposable
                         endpoints.MapGroup("/api/v1").MapOrgStructureEndpoints();
                         endpoints.MapGroup("/api/v1").MapEmployeeEndpoints();
                         endpoints.MapGroup("/api/v1").MapUserEndpoints();
+                        endpoints.MapGroup("/api/v1").MapWorkflowEndpoints();
                         endpoints.MapGet("/me", (HttpContext http, ITenantContext tenant) => Results.Ok(new
                         {
                             sub = http.User.FindFirst(HrmsClaims.Subject)?.Value,
                             tenant = tenant.TenantId?.ToString(),
                             roles = http.User.FindAll(HrmsClaims.Role).Select(c => c.Value).Order().ToArray(),
                         })).AllowAnyAuthenticatedUser();
+                        // The same answer on an endpoint that, like MFA set-up, admits the limited session.
+                        endpoints.MapGet("/me/limited", (HttpContext http) => Results.Ok(new
+                        {
+                            roles = http.User.FindAll(HrmsClaims.Role).Select(c => c.Value).Order().ToArray(),
+                        })).AllowAnyAuthenticatedUser().AllowMfaSetupSession();
                         endpoints.MapGet("/legal-entities", async (Hrms.Core.Infrastructure.Persistence.CoreDbContext db, CancellationToken ct) =>
                             Results.Ok(await db.LegalEntities.AsNoTracking().OrderBy(e => e.Code).Select(e => e.Code).ToListAsync(ct)))
                             .RequirePermission(Permissions.Core.LegalEntityView);
@@ -319,6 +336,26 @@ public sealed class TokenServerTestHost : IAsyncDisposable
         var (status, body) = await PasswordAsync(tenantCode, email, password);
         status.Should().Be(200, body.ToString());
         return (body.GetProperty("access_token").GetString()!, user.Id);
+    }
+
+    /// <summary>A service scope set to a tenant, the way a background job or a module's server code runs.</summary>
+    public AsyncServiceScope TenantScope(TenantId tenant)
+    {
+        var scope = _host.Services.CreateAsyncScope();
+        scope.ServiceProvider.GetRequiredService<TenantContext>().Set(tenant);
+        return scope;
+    }
+
+    public T Service<T>()
+        where T : notnull => _host.Services.GetRequiredService<T>();
+
+    /// <summary>Gives an existing user a role with a given data scope.</summary>
+    public async Task GrantRoleAtAsync(TenantId tenant, Guid userId, string roleCode, ScopeType scope, Guid? scopeValue)
+    {
+        await using var context = IdentityTestDb.Context(ConnectionString, tenant);
+        var role = await context.Roles.AsNoTracking().SingleAsync(r => r.Code == roleCode);
+        context.UserRoleScopes.Add(UserRoleScope.Create(userId, role.Id, scope, scopeValue).Value);
+        await context.SaveChangesAsync();
     }
 
     public async Task<UserAccount> LoadUserAsync(TenantId tenant, Guid userId)

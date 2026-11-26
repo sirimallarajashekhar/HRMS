@@ -30,6 +30,8 @@ public sealed class CoreDbContext(
 
     public DbSet<OrgUnitParent> OrgUnitParents => Set<OrgUnitParent>();
 
+    public DbSet<OrgUnitHead> OrgUnitHeads => Set<OrgUnitHead>();
+
     public DbSet<Location> Locations => Set<Location>();
 
     public DbSet<Geofence> Geofences => Set<Geofence>();

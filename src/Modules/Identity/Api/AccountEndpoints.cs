@@ -33,6 +33,7 @@ public static class AccountEndpoints
 
         var account = routes.MapGroup("/account")
             .AllowAnyAuthenticatedUser()
+            .AllowMfaSetupSession()
             .RequireRateLimiting(IdentityServerExtensions.AccountRateLimitPolicy)
             .WithTags("Account");
 

@@ -27,6 +27,15 @@ public sealed partial class PermissionAuthorizationHandler(
             return;
         }
 
+        // A caller who still owes the second factor gets nothing but the endpoints that opted in. Without endpoint information the
+        // answer is no.
+        if (context.User.HasClaim(HrmsClaims.SessionKind, HrmsClaims.MfaSetupSession)
+            && (context.Resource as HttpContext)?.GetEndpoint()?.Metadata.GetMetadata<MfaSetupSessionAllowed>() is null)
+        {
+            LogLimitedSession(logger);
+            return;
+        }
+
         if (requirement.Permission is null)
         {
             context.Succeed(requirement);
@@ -56,6 +65,9 @@ public sealed partial class PermissionAuthorizationHandler(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Authorization refused: the token tenant does not match the request tenant")]
     private static partial void LogTenantMismatch(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Authorization refused: an MFA set-up session may not call this endpoint")]
+    private static partial void LogLimitedSession(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Authorization refused: permission {Permission} not granted")]
     private static partial void LogPermissionDenied(ILogger logger, string permission);

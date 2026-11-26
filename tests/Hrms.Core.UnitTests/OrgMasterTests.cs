@@ -150,3 +150,38 @@ public class OrgMasterTests
         link.IsEffectiveOn(new DateOnly(2026, 6, 1)).Should().BeFalse();
     }
 }
+
+public class OrgUnitHeadTests
+{
+    private static readonly DateOnly March = new(2026, 3, 1);
+
+    private static OrgUnitHead Latest(DateOnly? to)
+    {
+        var head = OrgUnitHead.Create(Guid.CreateVersion7(), Guid.CreateVersion7(), March);
+        if (to is { } end)
+        {
+            head.EndOn(end);
+        }
+
+        return head;
+    }
+
+    [Theory]
+    // latest period: none, open from 1 March, or closed on 31 March. offset is the change date relative to 1 March.
+    [InlineData("none", true, 0, null)]
+    [InlineData("none", false, 0, "core.org_unit.no_head")]
+    [InlineData("open", true, 0, "core.org_unit.head_date_invalid")]
+    [InlineData("open", true, 1, null)]
+    [InlineData("open", false, 1, null)]
+    [InlineData("closed", true, 30, "core.org_unit.head_date_invalid")]
+    [InlineData("closed", true, 31, null)]
+    [InlineData("closed", false, 40, "core.org_unit.no_head")]
+    public void CheckChange_KeepsPeriodsInOrder(string latest, bool newHead, int offset, string? expected)
+    {
+        var period = latest switch { "open" => Latest(null), "closed" => Latest(new DateOnly(2026, 3, 31)), _ => null };
+
+        var result = OrgUnitHead.CheckChange(period, newHead ? Guid.CreateVersion7() : null, March.AddDays(offset));
+
+        (result.IsFailure ? result.Error.Code : null).Should().Be(expected);
+    }
+}

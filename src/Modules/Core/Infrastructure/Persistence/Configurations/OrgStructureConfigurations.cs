@@ -135,3 +135,18 @@ internal sealed class EmployeeTypeConfiguration : IEntityTypeConfiguration<Emplo
 {
     public void Configure(EntityTypeBuilder<EmployeeType> builder) => CodedMasterMapping.Map(builder);
 }
+
+internal sealed class OrgUnitHeadConfiguration : IEntityTypeConfiguration<OrgUnitHead>
+{
+    public void Configure(EntityTypeBuilder<OrgUnitHead> builder)
+    {
+        builder.HasKey(e => e.Id);
+        builder.Ignore(e => e.Period);
+        builder.HasOne<OrgUnit>().WithMany().HasForeignKey(e => e.OrgUnitId).OnDelete(DeleteBehavior.Restrict);
+
+        // One row per unit and start date: serves the head lookup on a date, and stops two racing changes.
+        builder.HasIndex(nameof(TenantEntity.TenantId), nameof(OrgUnitHead.OrgUnitId), nameof(OrgUnitHead.EffectiveFrom))
+            .IsUnique()
+            .HasDatabaseName("ux_org_unit_head_tenant_unit_from");
+    }
+}

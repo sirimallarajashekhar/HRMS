@@ -54,4 +54,12 @@ public static class AuthorizationExtensions
     public static TBuilder AllowAnyAuthenticatedUser<TBuilder>(this TBuilder builder)
         where TBuilder : IEndpointConventionBuilder =>
         builder.RequireAuthorization(PermissionPolicyProvider.AuthenticatedOnlyPolicy);
+
+    /// <summary>
+    /// Lets the limited session of someone who still has to set up MFA reach this endpoint. Every other endpoint refuses that session,
+    /// because its holder has proved only the password. Use it for MFA set-up and the caller's own account, nothing else.
+    /// </summary>
+    public static TBuilder AllowMfaSetupSession<TBuilder>(this TBuilder builder)
+        where TBuilder : IEndpointConventionBuilder =>
+        builder.WithMetadata(MfaSetupSessionAllowed.Instance);
 }

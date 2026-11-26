@@ -24,6 +24,19 @@ public static class EmployeeInfrastructureExtensions
         return services;
     }
 
+    /// <summary>
+    /// For the background worker: the database, what other modules ask of this one, and the default event publisher. It leaves out the
+    /// user-facing services, which need a signed-in user and data scopes that the worker does not have.
+    /// </summary>
+    public static IServiceCollection AddEmployeeBackground(this IServiceCollection services, string? mysqlConnectionString)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddDbContext<EmployeeDbContext>(options => UseEmployeeMySql(options, mysqlConnectionString));
+        services.AddEmployeeLookups();
+        return services;
+    }
+
     public static DbContextOptionsBuilder UseEmployeeMySql(DbContextOptionsBuilder options, string? mysqlConnectionString)
     {
         if (string.IsNullOrWhiteSpace(mysqlConnectionString))

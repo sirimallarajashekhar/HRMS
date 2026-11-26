@@ -87,6 +87,25 @@ public static class Permissions
         ];
     }
 
+    /// <summary>
+    /// Administration of the workflow engine. Acting on one's own approval tasks, one's own requests and one's own delegations needs
+    /// no permission: those are checked against the signed-in user.
+    /// </summary>
+    public static class Workflow
+    {
+        public const string DefinitionView = "workflow.definition.view";
+        public const string DefinitionManage = "workflow.definition.manage";
+
+        /// <summary>See other people's workflows, within the data scope.</summary>
+        public const string InstanceView = "workflow.instance.view";
+
+        /// <summary>Reassign tasks, retry blocked requests and retry failed result delivery, within the data scope.</summary>
+        public const string InstanceManage = "workflow.instance.manage";
+
+        /// <summary>Set up and revoke delegations for other people.</summary>
+        public const string DelegationManage = "workflow.delegation.manage";
+    }
+
     /// <summary>Every code in the catalogue, discovered from the nested classes' constants.</summary>
     public static IReadOnlySet<string> All { get; } = typeof(Permissions)
         .GetNestedTypes(BindingFlags.Public | BindingFlags.Static)

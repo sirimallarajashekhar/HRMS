@@ -74,4 +74,18 @@ public class EndpointAuthorizationScanTests(WebApplicationFactory<Program> facto
 
         FindUndeclared([silent, anonymous, permission, authenticated, plainAuthorize]).Should().BeEquivalentTo("silent", "plain-authorize");
     }
+
+    [Fact]
+    public void OnlyTheAccountEndpoints_AdmitTheSessionThatStillOwesMfa()
+    {
+        var admitting = factory.Services.GetRequiredService<EndpointDataSource>().Endpoints
+            .OfType<RouteEndpoint>()
+            .Where(endpoint => endpoint.Metadata.GetMetadata<MfaSetupSessionAllowed>() is not null)
+            .Select(endpoint => endpoint.RoutePattern.RawText!)
+            .ToList();
+
+        admitting.Should().NotBeEmpty("MFA set-up has to be reachable");
+        admitting.Should().OnlyContain(route => route.Contains("/account/", StringComparison.Ordinal),
+            "the holder of that session has proved only the password");
+    }
 }

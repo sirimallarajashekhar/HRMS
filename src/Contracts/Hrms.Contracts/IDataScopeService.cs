@@ -23,3 +23,12 @@ public interface IEmployeeScopeExpander
     /// <param name="grants">The scopes to expand; the result is the union of all of them.</param>
     Task<IReadOnlySet<Guid>> ExpandAsync(Guid? employeeId, IReadOnlyList<DataScopeGrant> grants, CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Raised when a data scope covers more employees than will be listed in memory. Roles that need that reach use a tenant-wide scope.
+/// </summary>
+public sealed class ScopeTooLargeException(int limit)
+    : InvalidOperationException($"The data scope covers more than {limit} employees; use a tenant-wide scope for roles that need that reach.")
+{
+    public int Limit { get; } = limit;
+}

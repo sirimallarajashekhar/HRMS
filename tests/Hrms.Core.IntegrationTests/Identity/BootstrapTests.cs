@@ -105,7 +105,7 @@ public class BootstrapTests(MySqlFixture mysql) : IAsyncLifetime
         var (status, body) = await _host.PasswordAsync("ACME", "admin@acme.example", Password);
         status.Should().Be(200, body.ToString());
         body.TryGetProperty("refresh_token", out _).Should().BeFalse();
-        using var me = await _host.GetAsync("/me", body.GetProperty("access_token").GetString());
+        using var me = await _host.GetAsync("/me/limited", body.GetProperty("access_token").GetString());
         JsonDocument.Parse(await me.Content.ReadAsStringAsync()).RootElement.GetProperty("roles").GetArrayLength().Should().Be(0);
     }
 

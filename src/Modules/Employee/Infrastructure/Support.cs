@@ -8,12 +8,6 @@ using Hrms.SharedKernel;
 
 namespace Hrms.Employee.Infrastructure;
 
-/// <summary>Raised when a data scope covers more employees than the module will materialise (see <see cref="EmployeeScopeExpander.MaxScopeSize"/>).</summary>
-public sealed class ScopeTooLargeException(int limit)
-    : InvalidOperationException($"The data scope covers more than {limit} employees; use a tenant-wide scope for roles that need that reach.")
-{
-    public int Limit { get; } = limit;
-}
 
 /// <summary>Parses the enum words the API accepts (case-insensitive names only, never numbers).</summary>
 internal static class EnumText

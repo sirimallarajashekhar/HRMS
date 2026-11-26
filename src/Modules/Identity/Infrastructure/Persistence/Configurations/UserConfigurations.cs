@@ -2,6 +2,7 @@ using Hrms.Identity.Domain.Roles;
 using Hrms.Identity.Domain.Security;
 using Hrms.Identity.Domain.Users;
 using Hrms.Persistence;
+using Hrms.SharedKernel;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -40,6 +41,10 @@ internal sealed class UserRoleScopeConfiguration : IEntityTypeConfiguration<User
 
         builder.HasOne<UserAccount>().WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Role>().WithMany().HasForeignKey(s => s.RoleId).OnDelete(DeleteBehavior.Restrict);
+
+        // Serves "who holds a role at this location" (the approver lookup).
+        builder.HasIndex(nameof(TenantEntity.TenantId), nameof(UserRoleScope.ScopeType), nameof(UserRoleScope.ScopeValue))
+            .HasDatabaseName("ix_user_role_scope_tenant_scope");
 
         builder.HasUniqueLiveCombination(
             "ux_user_role_scope_tenant_grant",
