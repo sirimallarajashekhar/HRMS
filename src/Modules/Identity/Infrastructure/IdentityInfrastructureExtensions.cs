@@ -36,6 +36,8 @@ public static class IdentityInfrastructureExtensions
         services.AddScoped<SecurityPolicyReader>();
         services.AddScoped<IPasswordSignInService, PasswordSignInService>();
         services.AddScoped<IAccountService, AccountService>();
+        services.AddScoped<IUserEmployeeLinkService, UserEmployeeLinkService>();
+        services.TryAddScoped<IEmployeeDirectory, NoEmployeeDirectory>();
 
         // The employee module (P0.6) registers the real expander, which replaces this default because it is added with TryAdd here.
         services.TryAddScoped<IEmployeeScopeExpander, SelfOnlyScopeExpander>();
