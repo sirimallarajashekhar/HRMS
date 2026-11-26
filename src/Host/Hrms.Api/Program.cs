@@ -6,6 +6,7 @@ using Hrms.Api;
 using Hrms.Api.Health;
 using Hrms.Core.Api;
 using Hrms.Core.Infrastructure;
+using Hrms.Identity.Api;
 using Hrms.Identity.Infrastructure;
 using Hrms.Persistence;
 using Hrms.Http.Authorization;
@@ -69,9 +70,10 @@ builder.Services.AddHrmsPersistence(mysqlConnectionString);
 // After AddHrmsTenancy so the real tenant directory replaces its deny-all default.
 builder.Services.AddCoreInfrastructure(mysqlConnectionString);
 builder.Services.AddIdentityInfrastructure(mysqlConnectionString);
+builder.Services.AddIdentityServer(builder.Configuration, builder.Environment);
 
 // Deny by default. Real JWT authentication replaces the placeholder scheme when the token server is wired in.
-builder.Services.AddAuthentication(NoAuthenticationHandler.SchemeName).AddHrmsNoAuthentication();
+// (token validation is registered with the identity server below)
 builder.Services.AddHrmsAuthorization();
 
 builder.Services.AddHealthChecks()
@@ -88,6 +90,7 @@ app.UseSerilogRequestLogging();
 
 // Routing first so the tenant middleware can read endpoint metadata; the tenant is resolved before any endpoint runs.
 app.UseRouting();
+app.UseRateLimiter();
 // Authentication first (the tenant can come from the token), then tenancy, then authorization, which needs both.
 app.UseAuthentication();
 app.UseHrmsTenancy();
@@ -99,6 +102,9 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check 
 ApiVersionSet versionSet = app.NewApiVersionSet().HasApiVersion(new ApiVersion(1, 0)).Build();
 var v1 = app.MapGroup("/api/v{version:apiVersion}").WithApiVersionSet(versionSet);
 v1.MapCoreEndpoints();
+
+// The OAuth token endpoint lives outside /api/v1: it is part of the OAuth protocol, not of the versioned API.
+app.MapTokenEndpoint();
 
 // The API description is not served in Production until it can sit behind authorization (P0.4).
 if (!app.Environment.IsProduction())

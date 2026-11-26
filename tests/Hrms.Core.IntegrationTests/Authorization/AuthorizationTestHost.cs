@@ -102,6 +102,8 @@ public static class AuthorizationTestHost
                     services.AddSingleton<IDiagnosticContext>(new DiagnosticContext(Log.Logger));
                     services.AddHrmsTenancy();
                     services.AddScoped<ITenantDirectory, AlwaysActiveDirectory>();
+                    // Header-only on purpose: these tests exercise the handler own tenant check, which the claim-first resolver would hide.
+                    services.AddSingleton<ITenantResolver, HeaderTenantResolver>();
                     services.AddAuthentication(TestAuthenticationHandler.SchemeName)
                         .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(TestAuthenticationHandler.SchemeName, _ => { });
                     services.AddHrmsAuthorization();

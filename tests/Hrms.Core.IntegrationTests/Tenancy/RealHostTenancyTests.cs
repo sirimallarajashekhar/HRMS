@@ -1,3 +1,4 @@
+using Hrms.Core.IntegrationTests.Identity;
 using System.Net;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
@@ -12,7 +13,7 @@ public class RealHostTenancyTests(WebApplicationFactory<Program> factory) : ICla
     public void RealHost_InProductionWithTheHeaderResolverEnabled_RefusesToStart()
     {
         using var production = factory.WithWebHostBuilder(builder => builder
-            .UseEnvironment("Production")
+            .UseProductionWithCertificates()
             .UseSetting("Tenancy:HeaderResolver:Enabled", "true"));
 
         var act = () => production.CreateClient();

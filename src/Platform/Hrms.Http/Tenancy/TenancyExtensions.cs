@@ -36,9 +36,10 @@ public static class TenancyExtensions
         services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantContext>());
         services.TryAddSingleton<IActorContext, SystemActorContext>();
 
-        services.AddSingleton<ITenantResolver>(sp => sp.GetRequiredService<IOptions<TenancyOptions>>().Value.HeaderResolver.Enabled
-            ? new HeaderTenantResolver()
-            : new NoTenantResolver());
+        // A signed-in caller's token decides the tenant; the dev header is consulted only for requests without a caller, and only when enabled.
+        services.AddSingleton<ITenantResolver>(sp => new CompositeTenantResolver(
+            new ClaimTenantResolver(),
+            sp.GetRequiredService<IOptions<TenancyOptions>>().Value.HeaderResolver.Enabled ? new HeaderTenantResolver() : null));
         services.TryAddScoped<ITenantDirectory, DenyAllTenantDirectory>();
 
         return services;

@@ -132,14 +132,19 @@ public class TenantRulesTests
     }
 
     [Fact]
-    public void IdentityModel_TheGlobalPermissionCatalogueIsTheOnlyUnfilteredEntity()
+    public void IdentityModel_OnlyThePermissionCatalogueAndTheOAuthStoresAreUnfiltered()
     {
         using var context = IdentityContext();
 
-        context.Model.GetEntityTypes()
+        var unfiltered = context.Model.GetEntityTypes()
             .Where(e => !e.ClrType.IsAssignableTo(typeof(TenantEntity)))
-            .Select(e => e.ClrType.Name)
-            .Should().Equal("PermissionDefinition");
+            .Select(e => e.ClrType)
+            .ToArray();
+
+        // Platform data: the global permission catalogue and the OpenIddict application, authorization, scope and token tables.
+        unfiltered.Where(type => type.Name != "PermissionDefinition" && type.Namespace != "OpenIddict.EntityFrameworkCore.Models")
+            .Should().BeEmpty();
+        unfiltered.Count(type => type.Namespace == "OpenIddict.EntityFrameworkCore.Models").Should().Be(4);
     }
 
     private sealed class Unindexed : TenantEntity;

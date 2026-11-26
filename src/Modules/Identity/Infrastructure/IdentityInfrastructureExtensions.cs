@@ -32,6 +32,11 @@ public static class IdentityInfrastructureExtensions
         services.AddSingleton<PermissionCache>();
         services.AddScoped<IPermissionStore, PermissionStore>();
         services.AddScoped<TenantIdentitySeeder>();
+        services.AddScoped<IPasswordSignInService, PasswordSignInService>();
+        services.AddScoped<OAuthClientSeeder>();
+
+        // The token server stores (applications, authorizations, tokens). The server and validation halves are configured by the API layer.
+        services.AddOpenIddict().AddCore(core => core.UseEntityFrameworkCore().UseDbContext<IdentityDbContext>().ReplaceDefaultEntities<Guid>());
         return services;
     }
 
@@ -45,6 +50,7 @@ public static class IdentityInfrastructureExtensions
         return options.UseMySql(
             MySqlConnectionStrings.ForHrms(mysqlConnectionString),
             new MySqlServerVersion(MySqlVersion),
-            mysql => mysql.MigrationsHistoryTable(IdentityDbContext.MigrationsHistoryTable));
+            mysql => mysql.MigrationsHistoryTable(IdentityDbContext.MigrationsHistoryTable))
+            .UseOpenIddict<Guid>();
     }
 }

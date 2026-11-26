@@ -21,6 +21,7 @@ public static class CoreInfrastructureExtensions
 
         services.AddDbContext<CoreDbContext>(options => UseCoreMySql(options, mysqlConnectionString));
         services.AddScoped<ITenantDirectory, TenantDirectory>();
+        services.AddScoped<ITenantLookup, TenantDirectory>();
         return services;
     }
 

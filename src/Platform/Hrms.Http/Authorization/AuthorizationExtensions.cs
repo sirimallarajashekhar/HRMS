@@ -1,6 +1,4 @@
-using System.Text.Encodings.Web;
 using Hrms.Contracts;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -21,19 +19,6 @@ public sealed class DenyAllPermissionStore : IPermissionStore
         ValueTask.FromResult(Empty);
 }
 
-/// <summary>
-/// Placeholder authentication scheme used until the JWT scheme is wired in with the token server: it never authenticates anyone,
-/// so protected endpoints answer 401. It is replaced, not extended, when real authentication arrives.
-/// </summary>
-public sealed class NoAuthenticationHandler(
-    IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)
-    : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
-{
-    public const string SchemeName = "HrmsNoAuthentication";
-
-    protected override Task<AuthenticateResult> HandleAuthenticateAsync() => Task.FromResult(AuthenticateResult.NoResult());
-}
-
 public static class AuthorizationExtensions
 {
     /// <summary>
@@ -50,12 +35,6 @@ public static class AuthorizationExtensions
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, ProblemAuthorizationResultHandler>();
         services.TryAddScoped<IPermissionStore, DenyAllPermissionStore>();
         return services;
-    }
-
-    public static AuthenticationBuilder AddHrmsNoAuthentication(this AuthenticationBuilder builder)
-    {
-        ArgumentNullException.ThrowIfNull(builder);
-        return builder.AddScheme<AuthenticationSchemeOptions, NoAuthenticationHandler>(NoAuthenticationHandler.SchemeName, _ => { });
     }
 
     /// <summary>The endpoint needs this permission from the catalogue.</summary>

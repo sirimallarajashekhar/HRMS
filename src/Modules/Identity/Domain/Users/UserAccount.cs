@@ -155,6 +155,16 @@ public sealed partial class UserAccount : TenantEntity
         LockoutUntil = null;
     }
 
+    /// <summary>
+    /// Stores a fresh hash of the same password (for example after the hashing cost was raised). Unlike
+    /// <see cref="ChangePassword"/> this keeps the security stamp, so sessions are not signed out.
+    /// </summary>
+    public void ReplacePasswordHash(string newPasswordHash)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(newPasswordHash);
+        PasswordHash = newPasswordHash;
+    }
+
     /// <summary>Disabling also rotates the stamp so tokens already issued stop being accepted.</summary>
     public void Disable()
     {

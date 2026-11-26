@@ -29,12 +29,16 @@ public sealed class IdentityPasswordHasher : IPasswordHasher
     private static readonly HashSubject Subject = new();
 
     private readonly PasswordHasher<HashSubject> _hasher;
+    private readonly Lazy<string> _dummyHash;
 
     public IdentityPasswordHasher(IOptions<PasswordHashingOptions> options)
     {
         ArgumentNullException.ThrowIfNull(options);
         _hasher = new PasswordHasher<HashSubject>(Options.Create(new PasswordHasherOptions { IterationCount = options.Value.IterationCount }));
+        _dummyHash = new Lazy<string>(() => _hasher.HashPassword(Subject, Guid.NewGuid().ToString("N")), LazyThreadSafetyMode.ExecutionAndPublication);
     }
+
+    public string DummyHash => _dummyHash.Value;
 
     public string Hash(string password)
     {

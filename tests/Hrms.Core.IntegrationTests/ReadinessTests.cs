@@ -1,3 +1,4 @@
+using Hrms.Core.IntegrationTests.Identity;
 using Microsoft.AspNetCore.Hosting;
 using System.Net;
 using FluentAssertions;
@@ -42,7 +43,7 @@ public class ReadinessTests(WebApplicationFactory<Program> factory) : IClassFixt
     [Fact]
     public async Task Ready_InProductionWithNoDependenciesConfigured_FailsClosedWith503()
     {
-        using var production = factory.WithWebHostBuilder(builder => builder.UseEnvironment("Production"));
+        using var production = factory.WithWebHostBuilder(builder => builder.UseProductionWithCertificates());
         using var client = production.CreateClient();
 
         var response = await client.GetAsync("/health/ready");
