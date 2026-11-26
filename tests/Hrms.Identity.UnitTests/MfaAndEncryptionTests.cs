@@ -93,7 +93,7 @@ public class MfaAndEncryptionTests
         var uri = Totp.ProvisioningUri("HRMS", "asha@example.com", RfcSecret);
 
         uri.Should().StartWith("otpauth://totp/HRMS:asha%40example.com?");
-        uri.Should().Contain("secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ").And.Contain("issuer=HRMS")
+        uri.Should().Contain($"secret={Base32.Encode(RfcSecret)}").And.Contain("issuer=HRMS")
             .And.Contain("algorithm=SHA1").And.Contain("digits=6").And.Contain("period=30");
     }
 

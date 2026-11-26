@@ -18,6 +18,12 @@ export ConnectionStrings__Mysql="Server=localhost;Port=3306;Database=hrms;User I
 export ConnectionStrings__Redis="localhost:6379,password=dev-redis-password"
 export ConnectionStrings__RabbitMq="amqp://hrms:dev-rabbit-password@localhost:5672"
 export Seq__ServerUrl="http://localhost:5341"
+
+# A field-encryption key for local runs, kept in your user secrets and never in the repo (do this once):
+dotnet user-secrets set --project src/Host/Hrms.Api "Encryption:CurrentKeyId" dev
+dotnet user-secrets set --project src/Host/Hrms.Api "Encryption:Keys:0:Id" dev
+dotnet user-secrets set --project src/Host/Hrms.Api "Encryption:Keys:0:Key" "$(openssl rand -base64 32)"
+
 dotnet run --project src/Host/Hrms.Api
 
 # 3. Check it

@@ -23,7 +23,7 @@ public sealed class FieldEncryptionOptions
 
     public IReadOnlyList<FieldEncryptionKey> Keys { get; init; } = [];
 
-    /// <summary>The id of the throw-away key in appsettings.Development.json; it is refused anywhere but Development.</summary>
+    /// <summary>The id of a local-development key (kept in user secrets or .env, never committed); it is refused anywhere but Development.</summary>
     public const string DevelopmentKeyId = "dev";
 }
 
