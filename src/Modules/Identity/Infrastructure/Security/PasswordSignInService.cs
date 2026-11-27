@@ -5,6 +5,7 @@ using Hrms.Identity.Application;
 using Hrms.Identity.Domain.Mfa;
 using Hrms.Identity.Domain.Users;
 using Hrms.Identity.Infrastructure.Persistence;
+using Hrms.Persistence;
 using Hrms.SharedKernel;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -103,9 +104,21 @@ public sealed partial class PasswordSignInService(
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateConcurrencyException)
+        catch (Exception ex) when (WriteConflicts.IsDatabaseFailure(ex))
         {
-            // Another sign-in changed the account at the same moment (for example it used the same code first): refuse, the client retries.
+            // Refused whatever failed. A lost race (another sign-in used the same code first) is routine: the client retries. For
+            // any other failure the refusal matters too: if wrong passwords were refused as usual (and not counted) while the right
+            // one caused a server error, that error would confirm a guess.
+            db.ChangeTracker.Clear();
+            if (WriteConflicts.Is(ex))
+            {
+                LogRefused(logger, "concurrent_change");
+            }
+            else
+            {
+                LogSignInSaveFailed(logger, ex);
+            }
+
             return Result.Failure<SignedInUser>(SignInErrors.InvalidCredentials);
         }
 
@@ -193,19 +206,39 @@ public sealed partial class PasswordSignInService(
         tenantContext.Set(id);
     }
 
+    /// <summary>
+    /// A database failure here is logged and not thrown: the caller then gives the usual refusal, as it would for an account that
+    /// does not exist. An error only real accounts can cause would tell them apart.
+    /// </summary>
     private async Task RegisterFailureAsync(Guid userId, DateTime now, string factor, CancellationToken cancellationToken)
     {
-        var policy = await policies.LockoutAsync(DateOnly.FromDateTime(now), cancellationToken);
-        var outcome = await FailedAttempts.RecordAsync(db, userId, now, policy, SecurityEvents.DuringSignIn, factor, cancellationToken);
-        LogRefused(logger, outcome is { LockedNow: true } ? "locked" : "wrong_credentials");
-        if (outcome is null)
+        try
         {
-            LogAttemptNotRecorded(logger);
+            var policy = await policies.LockoutAsync(DateOnly.FromDateTime(now), cancellationToken);
+            var outcome = await FailedAttempts.RecordAsync(db, userId, now, policy, SecurityEvents.DuringSignIn, factor, cancellationToken);
+            LogRefused(logger, outcome is { LockedNow: true } ? "locked" : "wrong_credentials");
+            if (outcome is null)
+            {
+                LogAttemptNotRecorded(logger);
+            }
+        }
+        catch (Exception ex) when (WriteConflicts.IsDatabaseFailure(ex))
+        {
+            db.ChangeTracker.Clear();
+            LogAttemptSaveFailed(logger, ex);
         }
     }
 
     [LoggerMessage(Level = LogLevel.Error, Message = "A wrong password or code could not be counted or logged: every try lost a race")]
     private static partial void LogAttemptNotRecorded(ILogger logger);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "ACTION NEEDED: a wrong password or code could not be counted or logged, so lockout may not be working")]
+    private static partial void LogAttemptSaveFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "ACTION NEEDED: a sign-in could not be saved, so it was refused")]
+    private static partial void LogSignInSaveFailed(ILogger logger, Exception exception);
 
     private async Task<List<RoleInfo>> LoadRolesAsync(Guid userId, CancellationToken cancellationToken) =>
         await db.UserRoleScopes.AsNoTracking()

@@ -12,6 +12,7 @@ using Hrms.Identity.Infrastructure.Security;
 using Hrms.Persistence.Auditing;
 using Hrms.SharedKernel;
 using Microsoft.EntityFrameworkCore;
+using MySqlConnector;
 
 namespace Hrms.Core.IntegrationTests.Identity;
 
@@ -265,6 +266,37 @@ public class SecurityAuditTests(MySqlFixture mysql) : IAsyncLifetime
         statuses.Should().OnlyContain(status => status >= 400 && status < 500);
         (await LogAsync(user.Id)).Count(e => e.Action == AuditAction.CredentialRefused).Should().Be(Limit - 1);
         (await _host.LoadUserAsync(_acme.TenantId, user.Id)).FailedAccessCount.Should().Be(Limit - 1);
+    }
+
+    /// <summary>
+    /// With the audit log refusing inserts, nothing about a sign-in can be saved. A right password, a wrong one and an unknown
+    /// account must still look the same: any difference would reveal which accounts exist, or confirm a guess nobody is counting.
+    /// </summary>
+    [Fact]
+    public async Task SignIn_WhenNothingCanBeSaved_RefusesRightWrongAndUnknownAlike()
+    {
+        var user = await AddUserAsync();
+        await using (var connection = new MySqlConnection(_connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = new MySqlCommand(
+                "CREATE TRIGGER audit_log_unavailable BEFORE INSERT ON audit_log FOR EACH ROW "
+                + "SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'audit unavailable'",
+                connection);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var unknown = await SignInAsync("nobody@example.com", Wrong);
+        var wrong = await SignInAsync(user.Email, Wrong);
+        var right = await SignInAsync(user.Email);
+
+        unknown.Status.Should().Be(400);
+        wrong.Status.Should().Be(400);
+        right.Status.Should().Be(400);
+        wrong.Body.ToString().Should().Be(unknown.Body.ToString());
+        right.Body.ToString().Should().Be(unknown.Body.ToString());
+        var stored = await _host.LoadUserAsync(_acme.TenantId, user.Id);
+        stored.LastLoginAt.Should().BeNull("the sign-in and its log entry are saved together or not at all");
     }
 
     [Fact]
