@@ -1,3 +1,4 @@
+using Hrms.Persistence.Auditing;
 using Hrms.SharedKernel;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -29,6 +30,7 @@ public abstract class TenantDbContext(
     {
         base.OnModelCreating(modelBuilder);
         ConfigureEntities(modelBuilder);
+        ConfigureAuditLog(modelBuilder);
         ApplyConventions(modelBuilder);
     }
 
@@ -45,16 +47,104 @@ public abstract class TenantDbContext(
         configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
     }
 
+    /// <summary>
+    /// True only for the one context whose migrations create the audit table. Every other context with audited entities maps the same
+    /// table so its audit rows are saved in the same transaction as the change, but leaves it out of its migrations.
+    /// </summary>
+    protected virtual bool OwnsAuditTable => false;
+
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
-        StampTenantAndAudit();
-        return base.SaveChanges(acceptAllChangesOnSuccess);
+        var audit = PrepareSave();
+        try
+        {
+            var written = base.SaveChanges(acceptAllChangesOnSuccess);
+            return written - audit.Count;
+        }
+        finally
+        {
+            Detach(audit);
+        }
     }
 
-    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
+        var audit = PrepareSave();
+        try
+        {
+            var written = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            return written - audit.Count;
+        }
+        finally
+        {
+            Detach(audit);
+        }
+    }
+
+    private List<AuditEntry> PrepareSave()
+    {
+        // The audit log is written here and nowhere else, and what is written never changes.
+        if (ChangeTracker.Entries<AuditEntry>().Any(e => e.State is not EntityState.Unchanged))
+        {
+            throw new InvalidOperationException("The audit log is append-only and is written only by the persistence layer.");
+        }
+
         StampTenantAndAudit();
-        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+
+        if (!ChangeTracker.Entries<TenantEntity>().Any(e => e.State is EntityState.Added or EntityState.Modified))
+        {
+            return [];
+        }
+
+        var audit = AuditCapture.Capture(ChangeTracker, tenantContext.Require(), timeProvider.GetUtcNow().UtcDateTime, actorContext);
+        AddRange(audit);
+        return audit;
+    }
+
+    /// <summary>
+    /// Always, so a failed save leaves no audit rows behind: a caller that retries would otherwise record the change once more for
+    /// every attempt.
+    /// </summary>
+    private void Detach(List<AuditEntry> audit)
+    {
+        foreach (var entry in audit)
+        {
+            Entry(entry).State = EntityState.Detached;
+        }
+    }
+
+    private void ConfigureAuditLog(ModelBuilder modelBuilder)
+    {
+        var hasAuditedEntity = modelBuilder.Model.GetEntityTypes().Any(e => AuditCapture.IsAudited(e.ClrType));
+        if (!OwnsAuditTable && !hasAuditedEntity)
+        {
+            return;
+        }
+
+        var entity = modelBuilder.Entity<AuditEntry>();
+        entity.ToTable("audit_log", table =>
+        {
+            if (!OwnsAuditTable)
+            {
+                table.ExcludeFromMigrations();
+            }
+        });
+
+        // MySQL requires the partitioning column in every unique key, the primary key included.
+        entity.HasKey(e => new { e.TenantId, e.OccurredAt, e.Id });
+        entity.Property(e => e.Id).ValueGeneratedNever();
+        entity.Property(e => e.EntityType).HasMaxLength(AuditEntry.EntityTypeMaxLength).IsRequired();
+        entity.Property(e => e.RootType).HasMaxLength(AuditEntry.EntityTypeMaxLength).IsRequired();
+        entity.Property(e => e.Action).HasConversion<int>();
+        entity.Property(e => e.ActorType).HasConversion<int>();
+        entity.Property(e => e.Changes).HasColumnType("json").IsRequired();
+        entity.Property(e => e.ClientId).HasMaxLength(AuditEntry.ClientIdMaxLength);
+        entity.Property(e => e.IpAddress).HasMaxLength(AuditEntry.IpAddressMaxLength);
+        entity.Property(e => e.Reason).HasMaxLength(AuditEntry.ReasonMaxLength);
+        entity.Property(e => e.CorrelationId).HasMaxLength(AuditEntry.CorrelationIdMaxLength);
+        entity.HasIndex(e => new { e.TenantId, e.RootType, e.RootId, e.OccurredAt, e.Id }).HasDatabaseName("ix_audit_log_tenant_root");
+        entity.HasIndex(e => new { e.TenantId, e.EntityType, e.RecordId, e.OccurredAt, e.Id }).HasDatabaseName("ix_audit_log_tenant_record");
+        entity.HasQueryFilter(e => e.TenantId == CurrentTenantId);
     }
 
     private void ApplyConventions(ModelBuilder modelBuilder)
