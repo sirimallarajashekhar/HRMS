@@ -64,6 +64,25 @@ internal static class AuditCapture
         return entries;
     }
 
+    /// <summary>A security event about <paramref name="subject"/>. Its details use the shape of field changes, with no old values.</summary>
+    public static AuditEntry Event(
+        EntityEntry<TenantEntity> subject,
+        AuditAction action,
+        IReadOnlyList<AuditFieldChange> details,
+        Guid? actorId,
+        AuditOrigin origin,
+        TenantId tenantId,
+        DateTime now)
+    {
+        var audited = subject.Metadata.ClrType.GetCustomAttribute<AuditedAttribute>(inherit: true)!;
+        var entityType = subject.Metadata.GetTableName()!;
+        var (rootType, rootId) = RootOf(subject, audited, entityType);
+
+        return new AuditEntry(
+            tenantId, now, entityType, subject.Entity.Id, rootType, rootId, action,
+            JsonSerializer.Serialize(details, Json), actorId, origin);
+    }
+
     private static AuditAction ActionOf(EntityEntry<TenantEntity> entry)
     {
         if (entry.State == EntityState.Added)

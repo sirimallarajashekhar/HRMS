@@ -7,6 +7,17 @@ public enum AuditAction
     Created = 1,
     Updated = 2,
     Deleted = 3,
+
+    // Security events (see TenantDbContext.RecordSecurityEvent). They say something happened to an account, not that a field changed.
+
+    /// <summary>The account signed in.</summary>
+    SignedIn = 4,
+
+    /// <summary>A wrong password or code was presented and counted against the account.</summary>
+    CredentialRefused = 5,
+
+    /// <summary>That wrong attempt locked the account.</summary>
+    LockedOut = 6,
 }
 
 /// <summary>

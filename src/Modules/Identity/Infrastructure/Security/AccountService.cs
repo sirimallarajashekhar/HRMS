@@ -94,7 +94,7 @@ public sealed class AccountService(
 
         if (passwordHasher.Verify(user.PasswordHash, password) == PasswordCheck.Failed)
         {
-            await RegisterFailureAsync(user, cancellationToken);
+            await RegisterFailureAsync(user, SecurityEvents.Password, cancellationToken);
             return Result.Failure(AccountErrors.WrongPassword);
         }
 
@@ -109,7 +109,7 @@ public sealed class AccountService(
 
         if (VerifyCode(user, code, user.MfaLastUsedStep) is null)
         {
-            await RegisterFailureAsync(user, cancellationToken);
+            await RegisterFailureAsync(user, SecurityEvents.Totp, cancellationToken);
             return Result.Failure(AccountErrors.WrongCode);
         }
 
@@ -129,7 +129,7 @@ public sealed class AccountService(
 
         if (passwordHasher.Verify(user.PasswordHash, currentPassword) == PasswordCheck.Failed)
         {
-            await RegisterFailureAsync(user, cancellationToken);
+            await RegisterFailureAsync(user, SecurityEvents.Password, cancellationToken);
             return Result.Failure(AccountErrors.WrongPassword);
         }
 
@@ -177,11 +177,12 @@ public sealed class AccountService(
         return secret is null ? null : Totp.Verify(secret, code?.Trim(), timeProvider.GetUtcNow(), lastUsedStep);
     }
 
-    private async Task RegisterFailureAsync(UserAccount user, CancellationToken cancellationToken)
+    private async Task RegisterFailureAsync(UserAccount user, string factor, CancellationToken cancellationToken)
     {
         // Guessing the password or a code through a stolen session counts like guessing at sign-in, so the same lockout stops it.
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        user.RegisterFailedAttempt(now, await policies.LockoutAsync(DateOnly.FromDateTime(now), cancellationToken));
+        var outcome = user.RegisterFailedAttempt(now, await policies.LockoutAsync(DateOnly.FromDateTime(now), cancellationToken));
+        SecurityEvents.Refused(db, user, outcome, SecurityEvents.DuringAccountChange, factor);
         await db.SaveChangesAsync(cancellationToken);
     }
 

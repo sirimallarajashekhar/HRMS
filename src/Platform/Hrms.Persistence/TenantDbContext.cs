@@ -23,6 +23,8 @@ public abstract class TenantDbContext(
     IActorContext actorContext,
     TimeProvider timeProvider) : DbContext(options)
 {
+    private readonly List<SecurityEvent> _securityEvents = [];
+
     /// <summary>The tenant the filters compare against. Empty when none is resolved, which no row can match.</summary>
     protected TenantId CurrentTenantId => tenantContext.TenantId ?? default;
 
@@ -53,12 +55,42 @@ public abstract class TenantDbContext(
     /// </summary>
     protected virtual bool OwnsAuditTable => false;
 
+    /// <summary>
+    /// Adds a security event to the audit log. It is written by the next save, in the same transaction as the other changes, and lasts
+    /// only while <paramref name="subject"/> stays tracked: clearing the change tracker to retry drops it along with the change.
+    /// </summary>
+    /// <param name="details">What happened. Never what the person typed: no password, code or other secret.</param>
+    /// <param name="provenActorId">
+    /// The user the request has just proved it is, for a request that has no signed-in caller yet (a sign-in). Null keeps the caller of
+    /// the request.
+    /// </param>
+    public void RecordSecurityEvent(
+        TenantEntity subject, AuditAction action, IReadOnlyList<AuditFieldChange> details, Guid? provenActorId = null)
+    {
+        ArgumentNullException.ThrowIfNull(subject);
+        ArgumentNullException.ThrowIfNull(details);
+
+        // Creations, updates and deletions are only ever captured from the real changes, so nothing can claim one that did not happen.
+        if (action is not (AuditAction.SignedIn or AuditAction.CredentialRefused or AuditAction.LockedOut))
+        {
+            throw new ArgumentOutOfRangeException(nameof(action), action, "Not a security event.");
+        }
+
+        if (!AuditCapture.IsAudited(subject.GetType()) || Entry(subject).State == EntityState.Detached)
+        {
+            throw new InvalidOperationException("A security event needs an audited record that this context is tracking.");
+        }
+
+        _securityEvents.Add(new SecurityEvent(subject, action, details, provenActorId));
+    }
+
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         var audit = PrepareSave();
         try
         {
             var written = base.SaveChanges(acceptAllChangesOnSuccess);
+            _securityEvents.Clear();
             return written - audit.Count;
         }
         finally
@@ -73,6 +105,7 @@ public abstract class TenantDbContext(
         try
         {
             var written = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            _securityEvents.Clear();
             return written - audit.Count;
         }
         finally
@@ -90,15 +123,40 @@ public abstract class TenantDbContext(
         }
 
         StampTenantAndAudit();
+        _securityEvents.RemoveAll(e => Entry(e.Subject).State == EntityState.Detached);
 
-        if (!ChangeTracker.Entries<TenantEntity>().Any(e => e.State is EntityState.Added or EntityState.Modified))
+        if (_securityEvents.Count == 0
+            && !ChangeTracker.Entries<TenantEntity>().Any(e => e.State is EntityState.Added or EntityState.Modified))
         {
             return [];
         }
 
-        var audit = AuditCapture.Capture(ChangeTracker, tenantContext.Require(), timeProvider.GetUtcNow().UtcDateTime, actorContext);
+        var tenantId = tenantContext.Require();
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var audit = AuditCapture.Capture(ChangeTracker, tenantId, now, actorContext);
+        audit.AddRange(_securityEvents.Select(e => ToEntry(e, tenantId, now)));
         AddRange(audit);
         return audit;
+    }
+
+    private AuditEntry ToEntry(SecurityEvent securityEvent, TenantId tenantId, DateTime now)
+    {
+        var subject = Entry(securityEvent.Subject);
+        if (subject.Entity.TenantId != tenantId)
+        {
+            throw new CrossTenantWriteException(subject.Metadata.ClrType.Name);
+        }
+
+        // The change reason a caller may send describes a change; on a security event it would only be unproven text.
+        var origin = actorContext.Origin with { Reason = null };
+        var actorId = actorContext.ActorId;
+        if (securityEvent.ProvenActorId is { } proven)
+        {
+            origin = origin with { ActorType = AuditActorType.User, ClientId = null };
+            actorId = proven;
+        }
+
+        return AuditCapture.Event(subject, securityEvent.Action, securityEvent.Details, actorId, origin, tenantId, now);
     }
 
     /// <summary>
@@ -259,6 +317,9 @@ public abstract class TenantDbContext(
             version.CurrentValue = version.OriginalValue + 1;
         }
     }
+
+    private sealed record SecurityEvent(
+        TenantEntity Subject, AuditAction Action, IReadOnlyList<AuditFieldChange> Details, Guid? ProvenActorId);
 
     private sealed class TenantIdConverter()
         : ValueConverter<TenantId, Guid>(v => v.Value, v => new TenantId(v));

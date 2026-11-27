@@ -107,6 +107,17 @@ public class UserAccountTests
     }
 
     [Fact]
+    public void RegisterFailedAttempt_SaysWhetherTheAttemptCounted_SoOnlyCountedOnesAreLogged()
+    {
+        var user = NewUser();
+
+        var counted = Enumerable.Range(0, 5).Select(_ => user.RegisterFailedAttempt(Now, ThreeStrikes).Counted).ToList();
+
+        counted.Should().Equal([true, true, true, false, false], "the third attempt locks the account, and later ones change nothing");
+        user.RegisterFailedAttempt(Now.AddMinutes(11), ThreeStrikes).Counted.Should().BeTrue("an expired lock starts a fresh count");
+    }
+
+    [Fact]
     public void RegisterFailedAttempt_AfterTheLockExpires_StartsAFreshCount()
     {
         var user = NewUser();

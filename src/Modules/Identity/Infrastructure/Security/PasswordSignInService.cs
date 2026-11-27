@@ -68,12 +68,13 @@ public sealed partial class PasswordSignInService(
 
         if (check == PasswordCheck.Failed)
         {
-            await RegisterFailureAsync(user.Id, now, cancellationToken);
+            await RegisterFailureAsync(user.Id, now, SecurityEvents.Password, cancellationToken);
             return Result.Failure<SignedInUser>(SignInErrors.InvalidCredentials);
         }
 
         var roles = await LoadRolesAsync(user.Id, cancellationToken);
         var enrollmentOnly = false;
+        string? secondFactor = null;
 
         if (user.MfaEnabled)
         {
@@ -83,9 +84,10 @@ public sealed partial class PasswordSignInService(
                 return Result.Failure<SignedInUser>(SignInErrors.MfaCodeRequired);
             }
 
+            secondFactor = string.IsNullOrWhiteSpace(mfa.TotpCode) ? SecurityEvents.RecoveryCode : SecurityEvents.Totp;
             if (!await VerifySecondFactorAsync(user, tenantId.Value, mfa, now, cancellationToken))
             {
-                await RegisterFailureAsync(user.Id, now, cancellationToken);
+                await RegisterFailureAsync(user.Id, now, secondFactor, cancellationToken);
                 return Result.Failure<SignedInUser>(SignInErrors.InvalidCredentials);
             }
         }
@@ -100,6 +102,8 @@ public sealed partial class PasswordSignInService(
         {
             user.ReplacePasswordHash(passwordHasher.Hash(password));
         }
+
+        SecurityEvents.SignedIn(db, user, secondFactor, enrollmentOnly);
 
         try
         {
@@ -195,7 +199,7 @@ public sealed partial class PasswordSignInService(
         tenantContext.Set(id);
     }
 
-    private async Task RegisterFailureAsync(Guid userId, DateTime now, CancellationToken cancellationToken)
+    private async Task RegisterFailureAsync(Guid userId, DateTime now, string factor, CancellationToken cancellationToken)
     {
         var policy = await policies.LockoutAsync(DateOnly.FromDateTime(now), cancellationToken);
 
@@ -203,6 +207,7 @@ public sealed partial class PasswordSignInService(
         {
             var user = await db.Users.SingleAsync(u => u.Id == userId, cancellationToken);
             var outcome = user.RegisterFailedAttempt(now, policy);
+            SecurityEvents.Refused(db, user, outcome, SecurityEvents.DuringSignIn, factor);
             try
             {
                 await db.SaveChangesAsync(cancellationToken);

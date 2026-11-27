@@ -11,7 +11,11 @@ public enum UserStatus
 }
 
 /// <summary>What a failed sign-in did to the account. Callers must not reveal any of it to the person signing in.</summary>
-public sealed record LockoutOutcome(bool LockedNow, DateTime? LockoutUntil);
+public sealed record LockoutOutcome(bool LockedNow, DateTime? LockoutUntil)
+{
+    /// <summary>False only for an attempt on an account that was already locked, which changes nothing.</summary>
+    public bool Counted => LockedNow || LockoutUntil is null;
+}
 
 /// <summary>
 /// A person who can sign in to one tenant. Passwords are never stored here, only a hash produced by the infrastructure hasher.
