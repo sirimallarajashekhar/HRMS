@@ -69,12 +69,14 @@ dotnet run --project src/Host/Hrms.Api -- bootstrap-tenant --code ACME --name "A
 
 Changes to people, organisation, access and workflow records are written to `audit_log` in the same transaction as the change, with sign-ins, wrong credentials and lockouts. Read one record's history with `GET /api/v1/audit/{entityType}/{recordId}?from&to&page&pageSize` (for example `employee` or `user_account`). The caller needs `audit.log.view` plus the permission and data scope that viewing that data needs. A client can say why it changes something with the `X-Change-Reason` header. Nothing is deleted automatically.
 
-**Partitions.** The table has one partition per month. The worker keeps the next 12 months in place (`Audit:Partitions:MonthsAhead`); if it cannot, writes still succeed and collect in the catch-all partition, and the worker logs an error each time it fails.
+**Partitions.** The table has one partition per month. The worker keeps the next 12 months in place (`Audit:Partitions:MonthsAhead`); if it cannot, writes still succeed and, once the months run out, collect in the catch-all partition `p_future`. The worker logs an error each time it fails. Its `ALTER` is cancelled after `Audit:Partitions:AlterTimeoutSeconds` (default 120).
+
+**If rows reach the catch-all, someone has to act.** Splitting it then copies those rows, and audited saves (sign-ins included) can be blocked until the copy finishes. The worker does not do this itself: it changes nothing and logs an error starting `ACTION NEEDED`, once an hour, **so alert on it.** The error contains the `ALTER TABLE` statement. Run it in a maintenance window from a client with no command timeout, after trying it on a copy to see how long it takes. If the error says no month is missing, look for a server with a wrong clock.
 
 **Production database users (to be set up by whoever runs the database).** The application refuses to update or delete audit rows, but only the database can stop everything else from doing so:
 
 - Give the API and worker user only `SELECT` and `INSERT` on `audit_log`. MySQL cannot take a table privilege away from a database-wide grant, so this means granting that user's privileges table by table.
-- Give the worker a second user that may alter `audit_log`, as `ConnectionStrings__MysqlMaintenance`. MySQL's `ALTER TABLE` needs more than `ALTER` (see its documentation for partition changes), so confirm the grants in a staging environment. Without this setting the worker uses its ordinary connection.
+- Give the worker a second user that may read and alter `audit_log`, as `ConnectionStrings__MysqlMaintenance`. MySQL's `ALTER TABLE` needs more than `ALTER` (see its documentation for partition changes), so confirm the grants in a staging environment. Without this setting the worker uses its ordinary connection.
 
 The local Docker setup uses one user with full rights on the database, so none of this is needed there.
 

@@ -67,18 +67,50 @@ public sealed class AuditPartitionTests(MySqlFixture mysql) : IAsyncLifetime
         NullLogger<AuditPartitionMaintenance>.Instance);
 
     [Fact]
-    public async Task Run_AddsTheMonthsAhead_MovesRowsOutOfTheCatchAll_AndCanBeRepeated()
+    public async Task Run_AddsTheMonthsAhead_AndCanBeRepeated()
     {
-        await InsertAtAsync(_connectionString, "2028-03-10 12:00:00");
         var maintenance = Maintenance(_connectionString, "2027-10-15");
 
-        var added = await maintenance.RunAsync(CancellationToken.None);
+        var run = await maintenance.RunAsync(CancellationToken.None);
 
-        added!.Select(p => p.Name).Should().HaveCount(10).And.StartWith("p202801").And.EndWith("p202810");
+        run!.CatchAllHasRows.Should().BeFalse();
+        run.Added.Select(p => p.Name).Should().HaveCount(10).And.StartWith("p202801").And.EndWith("p202810");
         (await PartitionsAsync()).Should().EndWith(["p202809", "p202810", "p_future"]);
+        (await maintenance.RunAsync(CancellationToken.None))!.Added.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Run_WhenTheCatchAllHoldsRows_ChangesNothing_AndGivesAStatementThatAddsTheMonths()
+    {
+        await InsertAtAsync(_connectionString, "2028-03-10 12:00:00");
+        var before = await PartitionsAsync();
+        var maintenance = Maintenance(_connectionString, "2027-10-15");
+
+        var run = await maintenance.RunAsync(CancellationToken.None);
+
+        run!.CatchAllHasRows.Should().BeTrue();
+        run.Added.Should().BeEmpty();
+        (await PartitionsAsync()).Should().Equal(before);
+
+        // What the operator does with the logged statement.
+        await ExecuteAsync(_connectionString, run.ManualStatement!);
+
         (await ColumnAsync("SELECT COUNT(*) FROM audit_log PARTITION (p202803)")).Should().Equal("1");
         (await ColumnAsync("SELECT COUNT(*) FROM audit_log")).Should().Equal("1");
-        (await maintenance.RunAsync(CancellationToken.None)).Should().BeEmpty();
+        var after = await maintenance.RunAsync(CancellationToken.None);
+        after!.CatchAllHasRows.Should().BeFalse();
+        after.Added.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Run_WhenNoMonthIsMissingButTheCatchAllHoldsRows_StillReportsIt()
+    {
+        await InsertAtAsync(_connectionString, "2031-01-01 00:00:00");
+
+        var run = await Maintenance(_connectionString, "2026-11-15").RunAsync(CancellationToken.None);
+
+        run!.CatchAllHasRows.Should().BeTrue();
+        run.ManualStatement.Should().BeNull();
     }
 
     [Fact]
@@ -86,9 +118,9 @@ public sealed class AuditPartitionTests(MySqlFixture mysql) : IAsyncLifetime
     {
         var before = await PartitionsAsync();
 
-        var added = await Maintenance(_connectionString, "2027-10-15", new HeldLock()).RunAsync(CancellationToken.None);
+        var run = await Maintenance(_connectionString, "2027-10-15", new HeldLock()).RunAsync(CancellationToken.None);
 
-        added.Should().BeNull();
+        run.Should().BeNull();
         (await PartitionsAsync()).Should().Equal(before);
     }
 
@@ -103,10 +135,15 @@ public sealed class AuditPartitionTests(MySqlFixture mysql) : IAsyncLifetime
 
         var run = () => Maintenance(limited, "2027-10-15").RunAsync(CancellationToken.None);
 
-        await run.Should().ThrowAsync<MySqlException>();
-        await InsertAtAsync(limited, "2028-03-10 12:00:00");
-        var delete = () => ExecuteAsync(limited, "DELETE FROM audit_log");
-        await delete.Should().ThrowAsync<MySqlException>("these are the grants that make the log append-only in the database");
+        // The error code matters: any other failure (a bad connection, a bad statement) would prove nothing about the grants.
+        (await run.Should().ThrowAsync<MySqlException>()).Which.ErrorCode.Should().Be(MySqlErrorCode.TableAccessDenied);
+        await InsertAtAsync(limited, "2027-03-10 12:00:00");
+        foreach (var statement in new[] { "UPDATE audit_log SET reason = 'rewritten'", "DELETE FROM audit_log" })
+        {
+            var attempt = () => ExecuteAsync(limited, statement);
+            (await attempt.Should().ThrowAsync<MySqlException>("these grants make the log append-only in the database"))
+                .Which.ErrorCode.Should().Be(MySqlErrorCode.TableAccessDenied);
+        }
     }
 
     private sealed class FreeLock : IJobLock

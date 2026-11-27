@@ -19,7 +19,20 @@ public sealed class AuditPartitionOptions
     /// </summary>
     [Range(1, 36)]
     public int MonthsAhead { get; set; } = 12;
+
+    /// <summary>
+    /// How long the ALTER may run before the client cancels it. Audited saves can be blocked while it runs, so this is also the
+    /// longest the job is prepared to hold them up. It only ever runs while the catch-all is empty, so it should have no rows to copy.
+    /// </summary>
+    [Range(10, 3600)]
+    public int AlterTimeoutSeconds { get; set; } = 120;
 }
+
+/// <summary>
+/// What one run did. <see cref="CatchAllHasRows"/> means nothing was changed and someone has to act:
+/// <see cref="ManualStatement"/> adds the missing months, and is null when none are missing yet.
+/// </summary>
+public sealed record AuditPartitionRun(IReadOnlyList<AuditPartition> Added, bool CatchAllHasRows, string? ManualStatement);
 
 /// <summary>
 /// The connection that may alter audit_log. In production the application's own user should only be able to read and insert audit
@@ -31,6 +44,11 @@ public sealed record AuditMaintenanceConnection(string? ConnectionString);
 /// Adds monthly partitions to audit_log ahead of time by splitting the catch-all. It only ever adds: nothing is dropped or deleted.
 /// It reads the table's definition and changes its layout, and returns no tenant's rows. MySQL cannot bind identifiers or partition
 /// bounds as parameters, so the statement is built from dates this code computed, never from input.
+/// <para>
+/// Splitting the catch-all copies whatever it holds, and audited saves can be blocked until that finishes. So the job only does it
+/// while the catch-all is empty. Once rows have reached it, how long the copy takes depends on how many there are, and a person
+/// has to choose when to run it: the job changes nothing and logs an error with the statement.
+/// </para>
 /// </summary>
 public sealed partial class AuditPartitionMaintenance(
     AuditMaintenanceConnection maintenance,
@@ -42,13 +60,13 @@ public sealed partial class AuditPartitionMaintenance(
     public const string LockName = "audit-partitions";
 
     /// <summary>
-    /// An ALTER waits for open transactions that touched the table, and new writes queue behind it while it waits. Giving up quickly
-    /// and trying again later is better than stalling every save.
+    /// Before it can start, an ALTER waits for open transactions that touched the table, and new writes queue behind it while it
+    /// waits, so it gives up quickly and tries again later. This limits that wait only, not how long the ALTER blocks once it runs.
     /// </summary>
     private const int LockWaitSeconds = 5;
 
-    /// <returns>The partitions added, or null when another instance holds the lock.</returns>
-    public async Task<IReadOnlyList<AuditPartition>?> RunAsync(CancellationToken cancellationToken)
+    /// <returns>What the run did, or null when another instance holds the lock.</returns>
+    public async Task<AuditPartitionRun?> RunAsync(CancellationToken cancellationToken)
     {
         var lease = await jobLock.TryAcquireAsync(LockName, cancellationToken);
         if (lease is null)
@@ -62,7 +80,7 @@ public sealed partial class AuditPartitionMaintenance(
         }
     }
 
-    private async Task<IReadOnlyList<AuditPartition>> AddMissingAsync(CancellationToken cancellationToken)
+    private async Task<AuditPartitionRun> AddMissingAsync(CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(maintenance.ConnectionString))
         {
@@ -75,21 +93,33 @@ public sealed partial class AuditPartitionMaintenance(
         var coveredUpTo = await ReadCoveredUpToAsync(connection, cancellationToken);
         var today = DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime);
         var missing = AuditPartitionPlan.Missing(coveredUpTo, today, options.Value.MonthsAhead);
-        if (missing.Count == 0)
-        {
-            return missing;
-        }
 
+        // Checked even when no month is missing: rows dated past the last month are a fault someone needs to hear about.
         if (await CatchAllHasRowsAsync(connection, cancellationToken))
         {
-            LogCatchAllHasRows(logger);
+            if (missing.Count == 0)
+            {
+                LogCatchAllHasUnexpectedRows(logger);
+                return new AuditPartitionRun([], CatchAllHasRows: true, ManualStatement: null);
+            }
+
+            var statement = SplitStatement(missing);
+            LogManualSplitNeeded(logger, missing.Count, statement);
+            return new AuditPartitionRun([], CatchAllHasRows: true, statement);
         }
 
-        await ExecuteAsync(
-            connection, string.Create(CultureInfo.InvariantCulture, $"SET SESSION lock_wait_timeout = {LockWaitSeconds}"), cancellationToken);
-        await ExecuteAsync(connection, SplitStatement(missing), cancellationToken);
-        LogAdded(logger, missing.Count, missing[0].Name, missing[^1].Name);
-        return missing;
+        if (missing.Count > 0)
+        {
+            await ExecuteAsync(
+                connection,
+                string.Create(CultureInfo.InvariantCulture, $"SET SESSION lock_wait_timeout = {LockWaitSeconds}"),
+                options.Value.AlterTimeoutSeconds,
+                cancellationToken);
+            await ExecuteAsync(connection, SplitStatement(missing), options.Value.AlterTimeoutSeconds, cancellationToken);
+            LogAdded(logger, missing.Count, missing[0].Name, missing[^1].Name);
+        }
+
+        return new AuditPartitionRun(missing, CatchAllHasRows: false, ManualStatement: null);
     }
 
     private static string SplitStatement(IReadOnlyList<AuditPartition> missing)
@@ -141,10 +171,11 @@ public sealed partial class AuditPartitionMaintenance(
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture) == 1;
     }
 
-    private static async Task ExecuteAsync(MySqlConnection connection, string sql, CancellationToken cancellationToken)
+    private static async Task ExecuteAsync(MySqlConnection connection, string sql, int timeoutSeconds, CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
+        command.CommandTimeout = timeoutSeconds;
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -152,12 +183,23 @@ public sealed partial class AuditPartitionMaintenance(
     private static partial void LogAdded(ILogger logger, int count, string first, string last);
 
     [LoggerMessage(
-        Level = LogLevel.Warning,
-        Message = "The audit log catch-all partition holds rows, so partitions fell behind. Moving them can block audited saves until it finishes")]
-    private static partial void LogCatchAllHasRows(ILogger logger);
+        Level = LogLevel.Error,
+        Message = "ACTION NEEDED: the audit log catch-all partition holds rows, so {Count} missing partitions were not added. "
+                  + "Run this in a maintenance window, as a user that may alter audit_log, because audited saves can be blocked until "
+                  + "it finishes: {Statement}")]
+    private static partial void LogManualSplitNeeded(ILogger logger, int count, string statement);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "ACTION NEEDED: the audit log catch-all partition holds rows although no month is missing. "
+                  + "Check for entries dated in the future (a wrong clock on a server)")]
+    private static partial void LogCatchAllHasUnexpectedRows(ILogger logger);
 }
 
-/// <summary>Runs the partition maintenance when the worker starts and then daily; after a failure it tries again within the hour.</summary>
+/// <summary>
+/// Runs the partition maintenance when the worker starts and then daily. After a failure, or while someone has to act, it runs
+/// hourly, which also repeats the alert.
+/// </summary>
 public sealed partial class AuditPartitionService(
     AuditPartitionMaintenance maintenance,
     TimeProvider time,
@@ -173,7 +215,10 @@ public sealed partial class AuditPartitionService(
             var wait = Interval;
             try
             {
-                await maintenance.RunAsync(stoppingToken);
+                if (await maintenance.RunAsync(stoppingToken) is { CatchAllHasRows: true })
+                {
+                    wait = RetryInterval;
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
