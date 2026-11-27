@@ -24,6 +24,7 @@
     <ProjectReference Include="../../src/Platform/Hrms.Http/Hrms.Http.csproj" />
     <ProjectReference Include="../../src/Platform/Hrms.Logging/Hrms.Logging.csproj" />
     <ProjectReference Include="../../src/Platform/Hrms.Persistence/Hrms.Persistence.csproj" />
+    <ProjectReference Include="../../src/Platform/Hrms.Audit/Hrms.Audit.csproj" />
     <ProjectReference Include="../../src/Platform/Hrms.Policy/Hrms.Policy.csproj" />
     <ProjectReference Include="../../src/Modules/Workflow/Api/Hrms.Workflow.Api.csproj" />
     <ProjectReference Include="../../src/Modules/Workflow/Infrastructure/Hrms.Workflow.Infrastructure.csproj" />
