@@ -94,13 +94,14 @@ internal static class AuditCapture
         return deleted.CurrentValue && !deleted.OriginalValue ? AuditAction.Deleted : AuditAction.Updated;
     }
 
+    /// <summary>
+    /// A creation lists the values the record starts with and an update the fields that differ. A deletion lists every value the
+    /// record held, because for a record older than the log this entry is the only account of what it was; its "new" is filled only
+    /// for a field the same save also changed.
+    /// </summary>
     private static List<AuditFieldChange> FieldChanges(EntityEntry<TenantEntity> entry, AuditAction action)
     {
         var changes = new List<AuditFieldChange>();
-        if (action == AuditAction.Deleted)
-        {
-            return changes;
-        }
 
         foreach (var property in entry.Properties)
         {
@@ -111,19 +112,26 @@ internal static class AuditCapture
                 continue;
             }
 
-            var created = action == AuditAction.Created;
-            var unchanged = created
-                ? property.CurrentValue is null
-                : property.Metadata.GetValueComparer().Equals(property.OriginalValue, property.CurrentValue);
-            if (unchanged)
+            var before = action == AuditAction.Created ? null : property.OriginalValue;
+            var differs = action != AuditAction.Created
+                          && !property.Metadata.GetValueComparer().Equals(property.OriginalValue, property.CurrentValue);
+            var relevant = action switch
+            {
+                AuditAction.Created => property.CurrentValue is not null,
+                AuditAction.Deleted => before is not null || differs,
+                _ => differs,
+            };
+            if (!relevant)
             {
                 continue;
             }
 
+            var after = action == AuditAction.Deleted && !differs ? null : property.CurrentValue;
+
             var field = JsonNamingPolicy.CamelCase.ConvertName(property.Metadata.Name);
             changes.Add(member.IsDefined(typeof(AuditSensitiveAttribute), inherit: true)
                 ? new AuditFieldChange(field, null, null, Sensitive: true)
-                : new AuditFieldChange(field, created ? null : property.OriginalValue, property.CurrentValue));
+                : new AuditFieldChange(field, before, after));
         }
 
         return changes;

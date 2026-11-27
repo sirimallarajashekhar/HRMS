@@ -181,6 +181,49 @@ public sealed class AuditCaptureTests(MySqlFixture mysql) : IClassFixture<MySqlF
         (await HistoryAsync(gadget.Id)).Select(e => e.Action).Should().Equal(AuditAction.Created, AuditAction.Deleted);
     }
 
+    /// <summary>For a record created before the log existed, the deletion is the only entry that can say what it was.</summary>
+    [Fact]
+    public async Task SaveChanges_WhenARecordIsDeleted_RecordsWhatItHeld_WithoutSensitiveOrIgnoredValues()
+    {
+        var gadget = await AddGadgetAsync("HELD", secret: "held-secret-value");
+        await using (var context = Context(_tenant))
+        {
+            context.Gadgets.Remove(await context.Gadgets.SingleAsync(g => g.Id == gadget.Id));
+            await context.SaveChangesAsync();
+        }
+
+        var fields = Fields((await HistoryAsync(gadget.Id))[1]);
+
+        fields.Keys.Should().BeEquivalentTo("code", "secret");
+        fields["code"].GetProperty("old").GetString().Should().Be("HELD");
+        fields["code"].GetProperty("new").ValueKind.Should().Be(JsonValueKind.Null);
+        fields["secret"].GetProperty("sensitive").GetBoolean().Should().BeTrue();
+        fields["secret"].GetRawText().Should().NotContain("held-secret-value");
+    }
+
+    [Fact]
+    public async Task SaveChanges_WhenARecordIsEditedAndDeletedTogether_RecordsTheStoredAndTheNewValue()
+    {
+        var gadget = await AddGadgetAsync("EDITDEL");
+        await using (var context = Context(_tenant))
+        {
+            var loaded = await context.Gadgets.SingleAsync(g => g.Id == gadget.Id);
+            loaded.Code = "EDITDEL-2";
+            loaded.Note = "added";
+            context.Gadgets.Remove(loaded);
+            await context.SaveChangesAsync();
+        }
+
+        var deletion = (await HistoryAsync(gadget.Id))[1];
+
+        deletion.Action.Should().Be(AuditAction.Deleted);
+        var fields = Fields(deletion);
+        fields["code"].GetProperty("old").GetString().Should().Be("EDITDEL");
+        fields["code"].GetProperty("new").GetString().Should().Be("EDITDEL-2");
+        fields["note"].GetProperty("old").ValueKind.Should().Be(JsonValueKind.Null);
+        fields["note"].GetProperty("new").GetString().Should().Be("added");
+    }
+
     [Fact]
     public async Task SaveChanges_WhenARecordHasAnOwner_FilesItUnderTheOwner()
     {
