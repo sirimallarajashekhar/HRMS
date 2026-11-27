@@ -89,6 +89,7 @@ public sealed class WorkflowActionLog : TenantEntity
 /// Lets one user act on another's approval tasks for a while. It is looked up when a task is shown or acted on, so it covers tasks that
 /// already exist and stops by itself. It is not passed on: a delegate's own delegate gets nothing.
 /// </summary>
+[Audited]
 public sealed class Delegation : TenantEntity
 {
     public const int MaxDays = 90;

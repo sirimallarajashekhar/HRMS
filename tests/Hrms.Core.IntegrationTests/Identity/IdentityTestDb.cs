@@ -46,6 +46,7 @@ public static class IdentityTestDb
         admin.Database = database;
         await using var context = Context(admin.ConnectionString, tenant: null);
         await context.Database.MigrateAsync();
+        await AuditTestDb.MigrateAsync(admin.ConnectionString);
         return admin.ConnectionString;
     }
 

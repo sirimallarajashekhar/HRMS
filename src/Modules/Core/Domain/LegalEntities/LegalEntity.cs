@@ -8,6 +8,7 @@ namespace Hrms.Core.Domain.LegalEntities;
 /// Country, currency, fiscal year start and country pack are fixed at creation: changing them would silently reinterpret
 /// past payroll, so a change of any of them is a new legal entity. Name, default language and time zone can be updated.
 /// </summary>
+[Audited]
 public sealed partial class LegalEntity : TenantEntity
 {
     public const int CodeMaxLength = 32;

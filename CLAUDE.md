@@ -118,7 +118,7 @@ Generic, multi-tenant HRMS for organisations with 500+ employees. Specs: docs/PR
 - Local infra: cp .env.example .env && docker compose up -d --wait (add --profile app to also run API + worker in containers)
 - Web: cd web && npm start / npm test
 - Add migration (run `dotnet tool restore` once; the EF CLI is pinned in dotnet-tools.json): dotnet ef migrations add <Name> --project src/Modules/<Module>/Infrastructure --startup-project src/Host/Hrms.Api --output-dir Persistence/Migrations. The "model matches the latest migration" test fails if you forget.
-- Bootstrap a tenant (default roles, first-party OAuth clients, first administrator): set HRMS_BOOTSTRAP_ADMIN_PASSWORD, then dotnet run --project src/Host/Hrms.Api -- bootstrap-tenant --code ACME --name "Acme Ltd" --admin-email admin@acme.example --admin-name "Acme Admin". It is idempotent; run migrations for Core and Identity first (dotnet ef database update per module; Employee and Workflow have their own too).
+- Bootstrap a tenant (default roles, first-party OAuth clients, first administrator): set HRMS_BOOTSTRAP_ADMIN_PASSWORD, then dotnet run --project src/Host/Hrms.Api -- bootstrap-tenant --code ACME --name "Acme Ltd" --admin-email admin@acme.example --admin-name "Acme Admin". It is idempotent; run migrations for Hrms.Audit, Core and Identity first (dotnet ef database update per project; Employee and Workflow have their own too). Apply Hrms.Audit (--project src/Platform/Hrms.Audit --context AuditDbContext) before any code that audits: without the audit_log table every audited save fails.
 
 ## Working style
 - Plan first, then wait for approval before writing code.

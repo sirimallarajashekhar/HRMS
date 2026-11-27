@@ -76,6 +76,8 @@ public sealed class TokenServerTestHost : IAsyncDisposable
         }
 
         admin.Database = database;
+        await AuditTestDb.MigrateAsync(admin.ConnectionString);
+
         await using (var core = CoreTestDb.Context(admin.ConnectionString, tenant: null))
         {
             await core.Database.MigrateAsync();

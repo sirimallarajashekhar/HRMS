@@ -43,6 +43,7 @@ public sealed record StageSpec(
 /// A version of the approval steps for one workflow key. A draft can be changed; a published version never changes, so a running request
 /// keeps the steps it started with. A new version takes over from its effective date for requests started from then on.
 /// </summary>
+[Audited]
 public sealed class WorkflowDefinition : TenantEntity
 {
     public const int NameMaxLength = 100;
@@ -74,6 +75,7 @@ public sealed class WorkflowDefinition : TenantEntity
     public DateTime? PublishedAt { get; private set; }
 
     /// <summary>Counts edits to the draft, so that changing only the stages still changes this row (and its row_version).</summary>
+    [AuditIgnore]
     public int Revision { get; private set; }
 
     public static Result<WorkflowDefinition> Create(string workflowKey, int version, string? name)
@@ -136,6 +138,7 @@ public sealed class WorkflowDefinition : TenantEntity
 }
 
 /// <summary>One stage of a definition. Rules and conditions are stored as the validated JSON.</summary>
+[Audited(RootType = "workflow_def", RootKey = nameof(DefinitionId))]
 public sealed class WorkflowStage : TenantEntity
 {
     public const int MaxStages = 10;

@@ -8,6 +8,7 @@ namespace Hrms.Core.Domain.Org;
 /// both exist), a name, and an active flag. Inactive rows stay readable and keep working where they are already used; they just
 /// cannot be chosen for new assignments (the employee module enforces that from P0.6).
 /// </summary>
+[Audited]
 public abstract partial class CodedMaster : TenantEntity
 {
     public const int CodeMaxLength = 32;

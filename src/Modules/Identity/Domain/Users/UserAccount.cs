@@ -17,6 +17,7 @@ public sealed record LockoutOutcome(bool LockedNow, DateTime? LockoutUntil);
 /// A person who can sign in to one tenant. Passwords are never stored here, only a hash produced by the infrastructure hasher.
 /// The lockout rules live in this entity so every sign-in path (password, refresh, MFA) obeys the same state machine.
 /// </summary>
+[Audited]
 public sealed partial class UserAccount : TenantEntity
 {
     public const int EmailMaxLength = 254;
@@ -45,21 +46,26 @@ public sealed partial class UserAccount : TenantEntity
 
     public string DisplayName { get; private set; }
 
+    [AuditIgnore]
     public string PasswordHash { get; private set; }
 
     /// <summary>Changes whenever the credentials change, so tokens issued before the change can be rejected.</summary>
+    [AuditIgnore]
     public string SecurityStamp { get; private set; }
 
     public UserStatus Status { get; private set; }
 
+    [AuditIgnore]
     public int FailedAccessCount { get; private set; }
 
+    [AuditIgnore]
     public DateTime? LockoutUntil { get; private set; }
 
     public DateTime PasswordChangedAt { get; private set; }
 
     public bool MustChangePassword { get; private set; }
 
+    [AuditIgnore]
     public DateTime? LastLoginAt { get; private set; }
 
     /// <summary>The employee this account belongs to, once the employee module exists (no foreign key across modules).</summary>
@@ -72,11 +78,13 @@ public sealed partial class UserAccount : TenantEntity
     public bool MfaEnabled { get; private set; }
 
     /// <summary>The TOTP secret, encrypted for storage. While <see cref="MfaEnabled"/> is false it is a pending enrolment.</summary>
+    [AuditIgnore]
     public string? MfaSecretProtected { get; private set; }
 
     public DateTime? MfaEnrolledAt { get; private set; }
 
     /// <summary>The last time step a code was accepted for; a code for this step or an earlier one is a replay and is refused.</summary>
+    [AuditIgnore]
     public long? MfaLastUsedStep { get; private set; }
 
     public bool HasPendingMfaEnrollment => !MfaEnabled && MfaSecretProtected is not null;

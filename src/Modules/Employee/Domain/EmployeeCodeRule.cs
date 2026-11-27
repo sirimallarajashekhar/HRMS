@@ -9,6 +9,7 @@ namespace Hrms.Employee.Domain;
 /// The number only moves forward (a code is never reused), and a number wider than the padding simply gets longer. Codes are unique
 /// per tenant, so two entities must use different prefixes; the unique index is the final guard.
 /// </summary>
+[Audited]
 public sealed partial class EmployeeCodeRule : TenantEntity
 {
     public const int PrefixMaxLength = 12;
@@ -32,6 +33,7 @@ public sealed partial class EmployeeCodeRule : TenantEntity
     public int Width { get; private set; }
 
     /// <summary>The number the next employee gets.</summary>
+    [AuditIgnore]
     public long NextNumber { get; private set; }
 
     public static Result<EmployeeCodeRule> Create(Guid legalEntityId, string? prefix, int width, long startNumber)

@@ -31,6 +31,7 @@ public static class CoreTestDb
         var connectionString = admin.ConnectionString;
         await using var context = Context(connectionString, tenant: null);
         await context.Database.MigrateAsync();
+        await AuditTestDb.MigrateAsync(admin.ConnectionString);
         return connectionString;
     }
 

@@ -25,6 +25,7 @@ public sealed record PersonalDetails(
 /// Personal data of one employee (one row per employee). Email and phone are personal contact data: they are masked for callers without
 /// the sensitive-view permission when read. Date of birth is validated against the real calendar, not just "not null".
 /// </summary>
+[Audited(RootType = "employee", RootKey = nameof(EmployeeId))]
 public sealed partial class EmployeePersonal : TenantEntity
 {
     public const int NameMaxLength = 100;
@@ -50,12 +51,15 @@ public sealed partial class EmployeePersonal : TenantEntity
 
     public string LastName { get; private set; } = string.Empty;
 
+    [AuditSensitive]
     public DateOnly DateOfBirth { get; private set; }
 
     public Gender Gender { get; private set; }
 
+    [AuditSensitive]
     public string? PersonalEmail { get; private set; }
 
+    [AuditSensitive]
     public string? Phone { get; private set; }
 
     /// <summary>First and last name, for lists and search results.</summary>

@@ -28,6 +28,7 @@ public sealed record JobDetails(
 /// date can be answered. Future-dated rows are stored at once and read as of their date; <see cref="EventPublishedAt"/> records that the
 /// "job changed" event went out on the day the row took effect.
 /// </summary>
+[Audited(RootType = "employee", RootKey = nameof(EmployeeId))]
 public sealed class EmployeeJob : EffectiveDatedEntity
 {
     public const int MaxNoticePeriodDays = 365;
@@ -79,6 +80,7 @@ public sealed class EmployeeJob : EffectiveDatedEntity
     public JobChangeReason Reason { get; private set; }
 
     /// <summary>When the "job changed" event for this row was published (null until it took effect and the daily job ran).</summary>
+    [AuditIgnore]
     public DateTime? EventPublishedAt { get; private set; }
 
     public static Result<EmployeeJob> Create(Guid employeeId, JobDetails? details, JobChangeReason reason, DateOnly effectiveFrom)

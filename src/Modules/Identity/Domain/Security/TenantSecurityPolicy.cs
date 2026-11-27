@@ -7,6 +7,7 @@ namespace Hrms.Identity.Domain.Security;
 /// current row and adds the next). When a tenant has no row for a date, <see cref="PasswordPolicy.Default"/> and
 /// <see cref="LockoutPolicy.Default"/> apply.
 /// </summary>
+[Audited]
 public sealed class TenantSecurityPolicy : EffectiveDatedEntity
 {
     public const int MinPasswordLengthFloor = 8;

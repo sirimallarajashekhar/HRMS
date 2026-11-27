@@ -6,6 +6,7 @@ namespace Hrms.Core.Domain.Org;
 /// Who heads an org unit for a period: effective-dated and never overwritten, like the unit's place in the tree. A unit may have no
 /// head for any stretch of time. The employee is a plain id: employees belong to another module.
 /// </summary>
+[Audited(RootType = "org_unit", RootKey = nameof(OrgUnitId))]
 public sealed class OrgUnitHead : EffectiveDatedEntity
 {
     private OrgUnitHead(Guid orgUnitId, Guid employeeId, DateOnly effectiveFrom)

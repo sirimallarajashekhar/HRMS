@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
+using Hrms.Http.Authorization;
 using Serilog.Context;
 
 namespace Hrms.Api;
@@ -23,6 +24,8 @@ public sealed partial class CorrelationIdMiddleware(RequestDelegate next)
             context.Response.Headers[HeaderName] = correlationId;
             return Task.CompletedTask;
         });
+
+        context.Items[AuditRequest.CorrelationIdItem] = correlationId;
 
         using (LogContext.PushProperty("CorrelationId", correlationId))
         {
