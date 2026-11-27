@@ -84,6 +84,14 @@ public class AuditRulesTests
     private static IEnumerable<IEntityType> Audited(IModel model) =>
         model.GetEntityTypes().Where(e => e.ClrType.GetCustomAttribute<AuditedAttribute>(inherit: true) is not null);
 
+    /// <summary>(root table, table) for every audited entity of every module.</summary>
+    internal static List<(string Root, string Entity)> AuditedEntityTables() => Contexts()
+        .SelectMany(c => Audited(c.Model))
+        .Select(e => (
+            Root: e.ClrType.GetCustomAttribute<AuditedAttribute>(inherit: true)!.RootType ?? e.GetTableName()!,
+            Entity: e.GetTableName()!))
+        .ToList();
+
     [Fact]
     public void AuditedEntities_RecordInTheClearOnlyTheListedFields()
     {

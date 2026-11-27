@@ -21,6 +21,12 @@ public static class Permissions
         public const string SensitiveView = "identity.sensitive.view";
     }
 
+    public static class Audit
+    {
+        /// <summary>Ask for the history of records. What comes back is still limited by each record's own view permissions and scope.</summary>
+        public const string LogView = "audit.log.view";
+    }
+
     public static class Core
     {
         public const string LegalEntityView = "core.legal_entity.view";

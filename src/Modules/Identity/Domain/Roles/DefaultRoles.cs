@@ -24,6 +24,7 @@ public static class DefaultRoles
             [.. Permissions.All.Order(StringComparer.Ordinal)]),
         new(HrAdmin, "HR administrator", "Manages people records and users, and can see sensitive fields.", true,
         [
+            Permissions.Audit.LogView,
             Permissions.Identity.UserView, Permissions.Identity.UserManage, Permissions.Identity.RoleView,
             Permissions.Identity.SensitiveView, Permissions.Core.LegalEntityView, Permissions.Core.LegalEntityManage,
             .. Permissions.Core.OrgStructureView, .. Permissions.Core.OrgStructureManage,
@@ -42,6 +43,7 @@ public static class DefaultRoles
         new(Employee, "Employee", "Self service only.", false, []),
         new(Auditor, "Auditor", "Read-only access for audit and compliance.", false,
         [
+            Permissions.Audit.LogView,
             Permissions.Identity.UserView, Permissions.Identity.RoleView, Permissions.Core.LegalEntityView, .. Permissions.Core.OrgStructureView, .. Permissions.Employee.ReadAll,
             Permissions.Workflow.DefinitionView, Permissions.Workflow.InstanceView,
         ]),

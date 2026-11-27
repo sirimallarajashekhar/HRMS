@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Hrms.Audit.Api;
 using Hrms.Contracts;
 using Hrms.Core.Api.Org;
 using Hrms.Employee.Api;
@@ -133,6 +134,7 @@ public sealed class TokenServerTestHost : IAsyncDisposable
                     services.AddIdentityInfrastructure(connectionString);
                     services.AddEmployeeInfrastructure(connectionString);
                     services.AddWorkflowInfrastructure(connectionString);
+                    services.AddAuditHistory(connectionString);
                     services.AddWorkflowProcessingServices();
                     TestWorkflows.Register(services);
                     services.AddIdentityServer(context.Configuration, context.HostingEnvironment);
@@ -153,6 +155,7 @@ public sealed class TokenServerTestHost : IAsyncDisposable
                         endpoints.MapGroup("/api/v1").MapEmployeeEndpoints();
                         endpoints.MapGroup("/api/v1").MapUserEndpoints();
                         endpoints.MapGroup("/api/v1").MapWorkflowEndpoints();
+                        endpoints.MapGroup("/api/v1").MapAuditEndpoints();
                         endpoints.MapGet("/me", (HttpContext http, ITenantContext tenant) => Results.Ok(new
                         {
                             sub = http.User.FindFirst(HrmsClaims.Subject)?.Value,

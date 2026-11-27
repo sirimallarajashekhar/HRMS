@@ -18,6 +18,7 @@ public static class EmployeeServiceExtensions
         services.AddScoped<IDocumentService, DocumentService>();
         services.AddScoped<IDeviceService, DeviceService>();
         services.AddScoped<IConsentService, ConsentService>();
+        services.AddScoped<IAuditRecordAccess, EmployeeAuditAccess>();
         services.AddSingleton<IStatutoryIdProtector, StatutoryIdProtector>();
 
         // The real scope expander replaces the identity module's self-only default, whichever module registered first.

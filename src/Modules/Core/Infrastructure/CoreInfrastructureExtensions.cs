@@ -25,6 +25,7 @@ public static class CoreInfrastructureExtensions
         services.AddScoped<ITenantLookup, TenantDirectory>();
         services.AddOrgStructure();
         services.AddScoped<IActiveTenantSource, ActiveTenantSource>();
+        services.AddScoped<Hrms.Contracts.IAuditRecordAccess, CoreAuditAccess>();
         return services;
     }
 

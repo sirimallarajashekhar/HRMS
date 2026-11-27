@@ -31,6 +31,7 @@ public static class WorkflowInfrastructureExtensions
         services.AddScoped<IWorkflowAdminService, WorkflowAdminService>();
         services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
         services.AddScoped<IDelegationService, DelegationService>();
+        services.AddScoped<IAuditRecordAccess, WorkflowAuditAccess>();
         services.AddScoped<IMasterUsageCheck, WorkflowUnitTypeUsageCheck>();
         return services;
     }
