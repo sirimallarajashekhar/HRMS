@@ -59,7 +59,9 @@ public sealed class AuditHistoryService(AuditDbContext db, IEnumerable<IAuditRec
             return NotFound();
         }
 
-        var visible = await VisibleEntityTypesAsync(found.Module, found.Type, recordId, holdsPermission, cancellationToken);
+        var allowed = await AllowedPermissionsAsync(found.Module, found.Type, recordId, holdsPermission, cancellationToken);
+        var visible = found.Type.Rules.Where(rule => allowed.Contains(rule.Permission)).Select(rule => rule.EntityType).ToList();
+        var showReason = found.Type.ReasonPermission is not { } reasonPermission || allowed.Contains(reasonPermission);
         var rootType = found.Type.RootType;
         if (!visible.Contains(rootType))
         {
@@ -89,12 +91,13 @@ public sealed class AuditHistoryService(AuditDbContext db, IEnumerable<IAuditRec
 
         var items = rows.Select(e => new AuditEntryView(
             e.Id, e.OccurredAt, e.EntityType, e.RecordId, Name(e.Action), Parse(e.Changes), Name(e.ActorType),
-            e.ActorId, e.ClientId, e.IpAddress, e.Reason, e.CorrelationId)).ToList();
+            e.ActorId, e.ClientId, e.IpAddress, showReason ? e.Reason : null, e.CorrelationId)).ToList();
 
         return Result.Success(new AuditHistoryPage(items, page, size, total));
     }
 
-    private static async Task<List<string>> VisibleEntityTypesAsync(
+    /// <summary>Which of the record type's permissions the caller holds with this record in their data scope for it.</summary>
+    private static async Task<HashSet<string>> AllowedPermissionsAsync(
         IAuditRecordAccess module,
         AuditRecordType type,
         Guid recordId,
@@ -102,14 +105,23 @@ public sealed class AuditHistoryService(AuditDbContext db, IEnumerable<IAuditRec
         CancellationToken cancellationToken)
     {
         // One scope check per permission, however many entity types share it.
-        var allowed = new Dictionary<string, bool>(StringComparer.Ordinal);
-        foreach (var permission in type.Rules.Select(rule => rule.Permission).Distinct(StringComparer.Ordinal))
+        var permissions = type.Rules.Select(rule => rule.Permission);
+        if (type.ReasonPermission is { } reasonPermission)
         {
-            allowed[permission] = await holdsPermission(permission)
-                                  && await module.IsInScopeAsync(type.RootType, recordId, permission, cancellationToken);
+            permissions = permissions.Append(reasonPermission);
         }
 
-        return type.Rules.Where(rule => allowed[rule.Permission]).Select(rule => rule.EntityType).ToList();
+        var allowed = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var permission in permissions.Distinct(StringComparer.Ordinal))
+        {
+            if (await holdsPermission(permission)
+                && await module.IsInScopeAsync(type.RootType, recordId, permission, cancellationToken))
+            {
+                allowed.Add(permission);
+            }
+        }
+
+        return allowed;
     }
 
     private static string Name<TEnum>(TEnum value)

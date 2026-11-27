@@ -94,6 +94,34 @@ public sealed class AuditHistoryApiTests(EmployeeApiFixture fixture) : EmployeeA
     }
 
     [Fact]
+    public async Task EmployeeHistory_ShowsChangeReasons_OnlyToCallersWhoMaySeePersonalData()
+    {
+        const string reason = "a private matter behind this change";
+        Guid employee;
+        Host.Client.DefaultRequestHeaders.Add("X-Change-Reason", reason);
+        try
+        {
+            employee = Id(await CreateEmployeeAsync(Acme));
+        }
+        finally
+        {
+            Host.Client.DefaultRequestHeaders.Remove("X-Change-Reason");
+        }
+
+        var withPersonal = await TokenAsync(Acme, ScopeType.Tenant, null, Everything);
+        var withoutPersonal = await TokenAsync(
+            Acme, ScopeType.Tenant, null, Permissions.Audit.LogView, Permissions.Employee.EmployeeView);
+
+        var (_, full) = await HistoryAsync("employee", employee, withPersonal);
+        var (status, limited) = await HistoryAsync("employee", employee, withoutPersonal);
+
+        full.ToString().Should().Contain(reason);
+        status.Should().Be(HttpStatusCode.OK, limited.ToString());
+        limited.GetProperty("items").GetArrayLength().Should().BeGreaterThan(0);
+        limited.ToString().Should().NotContain(reason);
+    }
+
+    [Fact]
     public async Task EmployeeHistory_OutsideTheDataScope_IsNotFound()
     {
         var own = Id(await CreateEmployeeAsync(Acme));

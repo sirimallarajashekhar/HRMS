@@ -5,7 +5,7 @@ namespace Hrms.Employee.Infrastructure;
 /// <summary>
 /// Each part of an employee's history needs what the profile needs to show that part, within the data scope of that permission: someone
 /// who may see the employee but not their personal data sees no personal changes. Separation details sit with personal data, as on the
-/// profile.
+/// profile. So do the reasons given for changes: one may explain a change to personal data or a separation.
 /// </summary>
 internal sealed class EmployeeAuditAccess(EmployeeAccess access) : IAuditRecordAccess
 {
@@ -24,7 +24,8 @@ internal sealed class EmployeeAuditAccess(EmployeeAccess access) : IAuditRecordA
             new("employee_document", Permissions.Employee.DocumentView),
             new("employee_device", Permissions.Employee.DeviceView),
             new("employee_consent", Permissions.Employee.ConsentView),
-        ]),
+        ],
+        ReasonPermission: Permissions.Employee.PersonalView),
         new(CodeRuleType, [new(CodeRuleType, Permissions.Employee.CodeRuleManage)]),
     ];
 

@@ -55,4 +55,14 @@ public class AuditAccessRulesTests
     [Fact]
     public void ViewRules_UseOnlyCataloguedPermissions() =>
         RecordTypes().SelectMany(t => t.Rules).Should().AllSatisfy(r => Permissions.IsKnown(r.Permission).Should().BeTrue(r.Permission));
+
+    [Fact]
+    public void EmployeeChangeReasons_NeedThePersonalDataPermission()
+    {
+        var types = RecordTypes();
+
+        types.Single(t => t.RootType == "employee").ReasonPermission.Should().Be(Permissions.Employee.PersonalView);
+        types.Where(t => t.ReasonPermission is not null)
+            .Should().AllSatisfy(t => Permissions.IsKnown(t.ReasonPermission!).Should().BeTrue(t.ReasonPermission));
+    }
 }
