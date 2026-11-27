@@ -46,6 +46,38 @@ Or run the API and worker in containers too: `docker compose --profile app up -d
 
 Stop with `docker compose down` (add `-v` to also delete data).
 
+## Database migrations and the first tenant
+
+Run these against your local database before using anything that reads or writes data. **`Hrms.Audit` goes first:** every save of an audited record also writes to `audit_log`, so without that table those saves fail. In a deployment, apply it before the new code is released.
+
+```bash
+dotnet tool restore
+export HRMS_MIGRATIONS_CONNECTION="$ConnectionStrings__Mysql"
+
+dotnet ef database update --project src/Platform/Hrms.Audit --startup-project src/Host/Hrms.Api --context AuditDbContext
+for module in Core Identity Employee Workflow; do
+  dotnet ef database update --project src/Modules/$module/Infrastructure --startup-project src/Host/Hrms.Api --context ${module}DbContext
+done
+
+export HRMS_BOOTSTRAP_ADMIN_PASSWORD="<choose one>"
+dotnet run --project src/Host/Hrms.Api -- bootstrap-tenant --code ACME --name "Acme Ltd" --admin-email admin@acme.example --admin-name "Acme Admin"
+```
+
+`bootstrap-tenant` is safe to repeat. **Run it again for each existing tenant after an upgrade:** it adds permissions that are new in that version (for example `audit.log.view`) to the default roles.
+
+## Audit log
+
+Changes to people, organisation, access and workflow records are written to `audit_log` in the same transaction as the change, with sign-ins, wrong credentials and lockouts. Read one record's history with `GET /api/v1/audit/{entityType}/{recordId}?from&to&page&pageSize` (for example `employee` or `user_account`). The caller needs `audit.log.view` plus the permission and data scope that viewing that data needs. A client can say why it changes something with the `X-Change-Reason` header. Nothing is deleted automatically.
+
+**Partitions.** The table has one partition per month. The worker keeps the next 12 months in place (`Audit:Partitions:MonthsAhead`); if it cannot, writes still succeed and collect in the catch-all partition, and the worker logs an error each time it fails.
+
+**Production database users (to be set up by whoever runs the database).** The application refuses to update or delete audit rows, but only the database can stop everything else from doing so:
+
+- Give the API and worker user only `SELECT` and `INSERT` on `audit_log`. MySQL cannot take a table privilege away from a database-wide grant, so this means granting that user's privileges table by table.
+- Give the worker a second user that may alter `audit_log`, as `ConnectionStrings__MysqlMaintenance`. MySQL's `ALTER TABLE` needs more than `ALTER` (see its documentation for partition changes), so confirm the grants in a staging environment. Without this setting the worker uses its ordinary connection.
+
+The local Docker setup uses one user with full rights on the database, so none of this is needed there.
+
 ## Build and test
 
 ```bash
