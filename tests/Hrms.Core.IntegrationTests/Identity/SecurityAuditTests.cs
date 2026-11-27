@@ -250,6 +250,24 @@ public class SecurityAuditTests(MySqlFixture mysql) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ParallelWrongCurrentPasswords_OnTheAccountScreen_AreEachCountedAndRecorded_WithoutServerErrors()
+    {
+        var user = await AddUserAsync();
+        var token = await TokenAsync(user.Email);
+
+        var statuses = await Task.WhenAll(Enumerable.Range(0, Limit - 1).Select(async _ =>
+        {
+            using var response = await _host.PostJsonAsync(
+                "/api/v1/account/password", new { currentPassword = Wrong, newPassword = NewPassword }, token);
+            return (int)response.StatusCode;
+        }));
+
+        statuses.Should().OnlyContain(status => status >= 400 && status < 500);
+        (await LogAsync(user.Id)).Count(e => e.Action == AuditAction.CredentialRefused).Should().Be(Limit - 1);
+        (await _host.LoadUserAsync(_acme.TenantId, user.Id)).FailedAccessCount.Should().Be(Limit - 1);
+    }
+
+    [Fact]
     public async Task History_ShowsSecurityEvents_ToItsOwnTenantOnly()
     {
         var user = await AddUserAsync();

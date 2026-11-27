@@ -5,6 +5,7 @@ using Hrms.Identity.Domain.Users;
 using Hrms.Identity.Infrastructure.Persistence;
 using Hrms.SharedKernel;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Hrms.Identity.Infrastructure.Security;
 
@@ -12,13 +13,14 @@ namespace Hrms.Identity.Infrastructure.Security;
 /// Self-service account operations. All of them read through <see cref="IdentityDbContext"/>, which is filtered to the tenant of the
 /// request, and take only the caller's own user id, so there is no way to name another user or another tenant's user.
 /// </summary>
-public sealed class AccountService(
+public sealed partial class AccountService(
     IdentityDbContext db,
     IPasswordHasher passwordHasher,
     IFieldEncryptor encryptor,
     ITenantContext tenantContext,
     SecurityPolicyReader policies,
-    TimeProvider timeProvider) : IAccountService
+    TimeProvider timeProvider,
+    ILogger<AccountService> logger) : IAccountService
 {
     public const string Issuer = "HRMS";
 
@@ -179,12 +181,20 @@ public sealed class AccountService(
 
     private async Task RegisterFailureAsync(UserAccount user, string factor, CancellationToken cancellationToken)
     {
-        // Guessing the password or a code through a stolen session counts like guessing at sign-in, so the same lockout stops it.
+        // Guessing the password or a code through a stolen session counts toward the same lockout as guessing at sign-in. A database
+        // failure other than a lost race is deliberately not caught: the request fails, as a correct guess would when it saves.
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var outcome = user.RegisterFailedAttempt(now, await policies.LockoutAsync(DateOnly.FromDateTime(now), cancellationToken));
-        SecurityEvents.Refused(db, user, outcome, SecurityEvents.DuringAccountChange, factor);
-        await db.SaveChangesAsync(cancellationToken);
+        var policy = await policies.LockoutAsync(DateOnly.FromDateTime(now), cancellationToken);
+        var outcome = await FailedAttempts.RecordAsync(
+            db, user.Id, now, policy, SecurityEvents.DuringAccountChange, factor, cancellationToken);
+        if (outcome is null)
+        {
+            LogAttemptNotRecorded(logger);
+        }
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "A wrong password or code could not be counted or logged: every try lost a race")]
+    private static partial void LogAttemptNotRecorded(ILogger logger);
 
     private async Task RetireRecoveryCodesAsync(Guid userId, CancellationToken cancellationToken)
     {

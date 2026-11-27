@@ -28,12 +28,6 @@ public sealed partial class PasswordSignInService(
     TimeProvider timeProvider,
     ILogger<PasswordSignInService> logger) : IPasswordSignInService
 {
-    /// <summary>
-    /// Parallel guesses update the same account row, so each failure is recorded with an optimistic retry. The budget is generous
-    /// and jittered: a burst of N simultaneous guesses needs up to N attempts for the slowest, and losing a count would help the attacker.
-    /// </summary>
-    private const int ConcurrencyRetries = 30;
-
     public async Task<Result<SignedInUser>> SignInAsync(
         string tenantCode, string email, string password, MfaProof? mfa, CancellationToken cancellationToken)
     {
@@ -202,29 +196,16 @@ public sealed partial class PasswordSignInService(
     private async Task RegisterFailureAsync(Guid userId, DateTime now, string factor, CancellationToken cancellationToken)
     {
         var policy = await policies.LockoutAsync(DateOnly.FromDateTime(now), cancellationToken);
-
-        for (var attempt = 0; attempt < ConcurrencyRetries; attempt++)
+        var outcome = await FailedAttempts.RecordAsync(db, userId, now, policy, SecurityEvents.DuringSignIn, factor, cancellationToken);
+        LogRefused(logger, outcome is { LockedNow: true } ? "locked" : "wrong_credentials");
+        if (outcome is null)
         {
-            var user = await db.Users.SingleAsync(u => u.Id == userId, cancellationToken);
-            var outcome = user.RegisterFailedAttempt(now, policy);
-            SecurityEvents.Refused(db, user, outcome, SecurityEvents.DuringSignIn, factor);
-            try
-            {
-                await db.SaveChangesAsync(cancellationToken);
-                LogRefused(logger, outcome.LockedNow ? "locked" : "wrong_credentials");
-                return;
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                // Guesses arriving in parallel update the same row; reload and count again so none is lost. The random pause
-                // spreads the retries out so contenders stop colliding on the same instant.
-                db.ChangeTracker.Clear();
-                await Task.Delay(Random.Shared.Next(1, 4 + (attempt * 2)), cancellationToken);
-            }
+            LogAttemptNotRecorded(logger);
         }
-
-        LogRefused(logger, "wrong_credentials");
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "A wrong password or code could not be counted or logged: every try lost a race")]
+    private static partial void LogAttemptNotRecorded(ILogger logger);
 
     private async Task<List<RoleInfo>> LoadRolesAsync(Guid userId, CancellationToken cancellationToken) =>
         await db.UserRoleScopes.AsNoTracking()
