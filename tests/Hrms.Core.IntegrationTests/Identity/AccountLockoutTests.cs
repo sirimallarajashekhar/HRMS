@@ -165,6 +165,91 @@ public class AccountLockoutTests(MySqlFixture mysql) : IAsyncLifetime
         (await ChangeAsync(token, Password)).Status.Should().Be(HttpStatusCode.NoContent);
     }
 
+    /// <summary>
+    /// While audit rows cannot be saved a wrong guess fails and is not counted, so no request carrying the right password may get an
+    /// answer a wrong one would not get.
+    /// </summary>
+    [Theory]
+    [InlineData("short", false)]
+    [InlineData(NewPassword, false)]
+    [InlineData(null, true)]
+    public async Task ChangePassword_WhenNothingCanBeSaved_AnswersRightAndWrongAlike(string? newPassword, bool sameAsCurrent)
+    {
+        var (user, token) = await SignedInUserAsync();
+        await MakeAuditLogUnavailableAsync();
+
+        Task<(HttpStatusCode, string?)> GuessAsync(string guess) => AnswerAsync(
+            ChangePassword, new { currentPassword = guess, newPassword = sameAsCurrent ? guess : newPassword }, token);
+
+        var wrong = await GuessAsync(Wrong);
+        var right = await GuessAsync(Password);
+
+        right.Should().Be(wrong);
+        (await _host.LoadUserAsync(_acme.TenantId, user.Id)).PasswordHash.Should().Be(user.PasswordHash);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DisableMfa_WhenNothingCanBeSaved_AnswersRightAndWrongAlike(bool requiredByRole)
+    {
+        var (user, token) = await SignedInUserAsync();
+        var codeNow = await EnrolAsync(token);
+        if (requiredByRole)
+        {
+            await _host.GrantRoleAsync(_acme.TenantId, user.Id, DefaultRoles.HrAdmin);
+        }
+
+        _host.Clock.Advance(TimeSpan.FromSeconds(Totp.PeriodSeconds * 2));
+        await MakeAuditLogUnavailableAsync();
+        var rightCode = codeNow();
+        var wrongCode = rightCode == "000000" ? "111111" : "000000";
+
+        Task<(HttpStatusCode, string?)> GuessAsync(string password, string code) => AnswerAsync(Disable, new { password, code }, token);
+
+        var wrong = await GuessAsync(Wrong, wrongCode);
+
+        (await GuessAsync(Password, wrongCode)).Should().Be(wrong, "a right password must not show");
+        (await GuessAsync(Password, rightCode)).Should().Be(wrong, "nor must a right password and code");
+        (await _host.LoadUserAsync(_acme.TenantId, user.Id)).MfaEnabled.Should().BeTrue();
+    }
+
+    /// <summary>Turns MFA on for the signed-in user and returns a way to get the code that is valid now.</summary>
+    private async Task<Func<string>> EnrolAsync(string token)
+    {
+        using var begin = await _host.PostJsonAsync(Enrollment, new { }, token);
+        var secret = JsonDocument.Parse(await begin.Content.ReadAsStringAsync()).RootElement.GetProperty("secret").GetString()!;
+        string CodeNow() => Totp.Compute(Base32.TryDecode(secret)!, Totp.StepAt(_host.Clock.GetUtcNow()));
+        using var confirm = await _host.PostJsonAsync(Confirm, new { code = CodeNow() }, token);
+        confirm.StatusCode.Should().Be(HttpStatusCode.OK);
+        return CodeNow;
+    }
+
+    private async Task<(HttpStatusCode, string?)> AnswerAsync(string path, object body, string token)
+    {
+        try
+        {
+            using var response = await _host.PostJsonAsync(path, body, token);
+            return (response.StatusCode, await CodeAsync(response));
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException)
+        {
+            // The test host lets an unhandled exception reach the test; the real API answers it with this.
+            return (HttpStatusCode.InternalServerError, "server.unexpected");
+        }
+    }
+
+    private async Task MakeAuditLogUnavailableAsync()
+    {
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var command = new MySqlCommand(
+            "CREATE TRIGGER audit_log_unavailable BEFORE INSERT ON audit_log FOR EACH ROW "
+            + "SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'audit unavailable'",
+            connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
     /// <summary>Stands in for another request saving the account: sets the lock (or none) and bumps the row version.</summary>
     private void ChangeRow(Guid userId, DateTime? lockoutUntil)
     {

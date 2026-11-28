@@ -100,11 +100,8 @@ public sealed partial class AccountService(
             return Result.Failure(AccountErrors.MfaNotEnabled);
         }
 
-        if (passwordHasher.Verify(user.PasswordHash, password) == PasswordCheck.Failed)
-        {
-            return Result.Failure(await RegisterFailureAsync(user, SecurityEvents.Password, AccountErrors.WrongPassword, cancellationToken));
-        }
-
+        // Every refusal that does not depend on what was typed comes before the password is checked. After the check each outcome
+        // saves (a counted failure or the change), so while nothing can be saved, a right password does not show.
         var requiredByRole = await db.UserRoleScopes.AsNoTracking()
             .Where(scope => scope.UserId == user.Id)
             .Join(db.Roles.AsNoTracking(), scope => scope.RoleId, role => role.Id, (scope, role) => role.RequiresMfa)
@@ -112,6 +109,11 @@ public sealed partial class AccountService(
         if (requiredByRole)
         {
             return Result.Failure(AccountErrors.MfaRequiredByRole);
+        }
+
+        if (passwordHasher.Verify(user.PasswordHash, password) == PasswordCheck.Failed)
+        {
+            return Result.Failure(await RegisterFailureAsync(user, SecurityEvents.Password, AccountErrors.WrongPassword, cancellationToken));
         }
 
         if (VerifyCode(user, code, user.MfaLastUsedStep) is null)
@@ -138,11 +140,8 @@ public sealed partial class AccountService(
             return Result.Failure(AccountErrors.LockedOut);
         }
 
-        if (passwordHasher.Verify(user.PasswordHash, currentPassword) == PasswordCheck.Failed)
-        {
-            return Result.Failure(await RegisterFailureAsync(user, SecurityEvents.Password, AccountErrors.WrongPassword, cancellationToken));
-        }
-
+        // As in DisableMfaAsync: the new password is judged on what was sent, before the current one is checked. Comparing the new
+        // password with the stored hash here would refuse a right guess without saving anything.
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var violations = (await policies.PasswordAsync(DateOnly.FromDateTime(now), cancellationToken)).Validate(newPassword);
         if (violations.Count > 0)
@@ -150,9 +149,14 @@ public sealed partial class AccountService(
             return Result.Failure(AccountErrors.PasswordPolicy(violations));
         }
 
-        if (passwordHasher.Verify(user.PasswordHash, newPassword) != PasswordCheck.Failed)
+        if (string.Equals(newPassword, currentPassword, StringComparison.Ordinal))
         {
             return Result.Failure(Error.Validation("identity.account.password_unchanged", "The new password must differ from the current one."));
+        }
+
+        if (passwordHasher.Verify(user.PasswordHash, currentPassword) == PasswordCheck.Failed)
+        {
+            return Result.Failure(await RegisterFailureAsync(user, SecurityEvents.Password, AccountErrors.WrongPassword, cancellationToken));
         }
 
         user.ChangePassword(passwordHasher.Hash(newPassword), now);
@@ -211,7 +215,8 @@ public sealed partial class AccountService(
     private async Task<Error> RegisterFailureAsync(UserAccount user, string factor, Error refusal, CancellationToken cancellationToken)
     {
         // Guessing the password or a code through a stolen session counts toward the same lockout as guessing at sign-in. A database
-        // failure other than a lost race is deliberately not caught: the request fails, as a correct guess would when it saves.
+        // failure other than a lost race is deliberately not caught: the request fails, as a correct guess does, because every
+        // path after a right password saves. Keep it so when adding a refusal.
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var policy = await policies.LockoutAsync(DateOnly.FromDateTime(now), cancellationToken);
         var outcome = await FailedAttempts.RecordAsync(
