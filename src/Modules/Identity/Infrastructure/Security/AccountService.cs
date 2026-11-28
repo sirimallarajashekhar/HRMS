@@ -3,6 +3,7 @@ using Hrms.Identity.Application;
 using Hrms.Identity.Domain.Mfa;
 using Hrms.Identity.Domain.Users;
 using Hrms.Identity.Infrastructure.Persistence;
+using Hrms.Persistence;
 using Hrms.SharedKernel;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -89,6 +90,11 @@ public sealed partial class AccountService(
             return Result.Failure(AccountErrors.UserNotFound);
         }
 
+        if (IsLockedOut(user))
+        {
+            return Result.Failure(AccountErrors.LockedOut);
+        }
+
         if (!user.MfaEnabled)
         {
             return Result.Failure(AccountErrors.MfaNotEnabled);
@@ -96,8 +102,7 @@ public sealed partial class AccountService(
 
         if (passwordHasher.Verify(user.PasswordHash, password) == PasswordCheck.Failed)
         {
-            await RegisterFailureAsync(user, SecurityEvents.Password, cancellationToken);
-            return Result.Failure(AccountErrors.WrongPassword);
+            return Result.Failure(await RegisterFailureAsync(user, SecurityEvents.Password, AccountErrors.WrongPassword, cancellationToken));
         }
 
         var requiredByRole = await db.UserRoleScopes.AsNoTracking()
@@ -111,14 +116,12 @@ public sealed partial class AccountService(
 
         if (VerifyCode(user, code, user.MfaLastUsedStep) is null)
         {
-            await RegisterFailureAsync(user, SecurityEvents.Totp, cancellationToken);
-            return Result.Failure(AccountErrors.WrongCode);
+            return Result.Failure(await RegisterFailureAsync(user, SecurityEvents.Totp, AccountErrors.WrongCode, cancellationToken));
         }
 
         user.DisableMfa();
         await RetireRecoveryCodesAsync(user.Id, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        return Result.Success();
+        return await SaveCredentialChangeAsync(user.Id, cancellationToken);
     }
 
     public async Task<Result> ChangePasswordAsync(Guid userId, string currentPassword, string newPassword, CancellationToken cancellationToken)
@@ -129,10 +132,15 @@ public sealed partial class AccountService(
             return Result.Failure(AccountErrors.UserNotFound);
         }
 
+        // Checked before the password: a locked account learns nothing from a guess, and a change would lift the lock.
+        if (IsLockedOut(user))
+        {
+            return Result.Failure(AccountErrors.LockedOut);
+        }
+
         if (passwordHasher.Verify(user.PasswordHash, currentPassword) == PasswordCheck.Failed)
         {
-            await RegisterFailureAsync(user, SecurityEvents.Password, cancellationToken);
-            return Result.Failure(AccountErrors.WrongPassword);
+            return Result.Failure(await RegisterFailureAsync(user, SecurityEvents.Password, AccountErrors.WrongPassword, cancellationToken));
         }
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
@@ -148,8 +156,7 @@ public sealed partial class AccountService(
         }
 
         user.ChangePassword(passwordHasher.Hash(newPassword), now);
-        await db.SaveChangesAsync(cancellationToken);
-        return Result.Success();
+        return await SaveCredentialChangeAsync(user.Id, cancellationToken);
     }
 
     private Task<UserAccount?> LoadAsync(Guid userId, CancellationToken cancellationToken) =>
@@ -179,7 +186,29 @@ public sealed partial class AccountService(
         return secret is null ? null : Totp.Verify(secret, code?.Trim(), timeProvider.GetUtcNow(), lastUsedStep);
     }
 
-    private async Task RegisterFailureAsync(UserAccount user, string factor, CancellationToken cancellationToken)
+    private bool IsLockedOut(UserAccount user) => user.IsLockedOut(timeProvider.GetUtcNow().UtcDateTime);
+
+    /// <summary>
+    /// Saves a change that a right password allowed. If parallel wrong guesses changed the account first, nothing is written: the
+    /// answer is the lock if they caused one, as a wrong guess would get, and otherwise a conflict the caller can retry.
+    /// </summary>
+    private async Task<Result> SaveCredentialChangeAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            return Result.Success();
+        }
+        catch (Exception ex) when (WriteConflicts.Is(ex))
+        {
+            db.ChangeTracker.Clear();
+            var current = await LoadAsync(userId, cancellationToken);
+            return Result.Failure(current is not null && IsLockedOut(current) ? AccountErrors.LockedOut : AccountErrors.ConcurrentChange);
+        }
+    }
+
+    /// <returns>The error to answer with: <paramref name="refusal"/>, or the lock if another request had locked the account first.</returns>
+    private async Task<Error> RegisterFailureAsync(UserAccount user, string factor, Error refusal, CancellationToken cancellationToken)
     {
         // Guessing the password or a code through a stolen session counts toward the same lockout as guessing at sign-in. A database
         // failure other than a lost race is deliberately not caught: the request fails, as a correct guess would when it saves.
@@ -191,6 +220,8 @@ public sealed partial class AccountService(
         {
             LogAttemptNotRecorded(logger);
         }
+
+        return outcome is { Counted: false } ? AccountErrors.LockedOut : refusal;
     }
 
     [LoggerMessage(Level = LogLevel.Error, Message = "A wrong password or code could not be counted or logged: every try lost a race")]
