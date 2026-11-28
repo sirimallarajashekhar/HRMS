@@ -87,6 +87,26 @@ dotnet build Hrms.sln
 dotnet test Hrms.sln          # integration tests start a MySQL container via Testcontainers, so Docker must be running
 ```
 
+### Integration tests on a local MySQL (without Docker)
+
+Set `HRMS_TEST_MYSQL` to a connection string for the `root` user of a **local MySQL 8.4 server kept for development and tests**, and pass the settings file that stops test collections running in parallel (they share the one server). In PowerShell:
+
+```powershell
+$env:HRMS_TEST_MYSQL = "Server=127.0.0.1;Port=3308;User ID=root;Password=<your local root password>"
+dotnet test Hrms.sln --settings tests/local-mysql.runsettings
+```
+
+The tests create databases (named `hrmstest_*`) and one limited user, and drop them afterwards; a run that is killed leaves them behind. The run is refused unless the server has these settings, which match the container (`my.ini`, section `[mysqld]`):
+
+```ini
+character-set-server=utf8mb4
+collation-server=utf8mb4_0900_ai_ci
+default-time-zone=+00:00
+max_connections=1000
+```
+
+The transaction isolation stays at MySQL's default, `REPEATABLE-READ`. The Docker Compose server instead runs the application at `READ-COMMITTED`; on a server shared with the tests, give only the application's user that level with `init_connect="SET SESSION transaction_isolation='READ-COMMITTED'"` (MySQL does not run `init_connect` for administrators such as `root`). CI does not set the variable and keeps using containers.
+
 ## CI/CD
 
 `.github/workflows/ci.yml` runs on every pull request: build (warnings are errors), unit + architecture + integration tests, NuGet vulnerability scan, secret scan (gitleaks) and Docker image builds. `.github/workflows/cd.yml` is a skeleton that publishes images to GHCR and promotes dev → staging → prod; the deploy steps are placeholders and `prod` must be protected with required reviewers in the GitHub environment settings.

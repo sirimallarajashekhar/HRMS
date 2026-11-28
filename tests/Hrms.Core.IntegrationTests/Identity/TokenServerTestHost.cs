@@ -34,7 +34,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using MySqlConnector;
 using Serilog;
 using Serilog.Extensions.Hosting;
 
@@ -67,39 +66,30 @@ public sealed class TokenServerTestHost : IAsyncDisposable
 
     public static async Task<string> CreateDatabaseAsync(MySqlFixture mysql)
     {
-        var database = $"auth_{Guid.NewGuid():N}";
-        var admin = new MySqlConnectionStringBuilder(mysql.ConnectionString) { UserID = "root", Database = string.Empty };
-        await using (var connection = new MySqlConnection(admin.ConnectionString))
-        {
-            await connection.OpenAsync();
-            await using var create = new MySqlCommand($"CREATE DATABASE `{database}` CHARACTER SET utf8mb4", connection);
-            await create.ExecuteNonQueryAsync();
-        }
+        var connectionString = await mysql.CreateDatabaseAsync();
+        await AuditTestDb.MigrateAsync(connectionString);
 
-        admin.Database = database;
-        await AuditTestDb.MigrateAsync(admin.ConnectionString);
-
-        await using (var core = CoreTestDb.Context(admin.ConnectionString, tenant: null))
+        await using (var core = CoreTestDb.Context(connectionString, tenant: null))
         {
             await core.Database.MigrateAsync();
         }
 
-        await using (var identity = IdentityTestDb.Context(admin.ConnectionString, tenant: null))
+        await using (var identity = IdentityTestDb.Context(connectionString, tenant: null))
         {
             await identity.Database.MigrateAsync();
         }
 
-        await using (var workflow = WorkflowTestDb.Context(admin.ConnectionString, tenant: null))
+        await using (var workflow = WorkflowTestDb.Context(connectionString, tenant: null))
         {
             await workflow.Database.MigrateAsync();
         }
 
-        await using (var employee = EmployeeTestDb.Context(admin.ConnectionString, tenant: null))
+        await using (var employee = EmployeeTestDb.Context(connectionString, tenant: null))
         {
             await employee.Database.MigrateAsync();
         }
 
-        return admin.ConnectionString;
+        return connectionString;
     }
 
     public static async Task<TokenServerTestHost> StartAsync(

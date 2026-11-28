@@ -13,17 +13,7 @@ public sealed class AuditSchemaTests(MySqlFixture mysql) : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var database = $"audit_{Guid.NewGuid():N}";
-        var admin = new MySqlConnectionStringBuilder(mysql.ConnectionString) { UserID = "root", Database = string.Empty };
-        await using (var connection = new MySqlConnection(admin.ConnectionString))
-        {
-            await connection.OpenAsync();
-            await using var create = new MySqlCommand($"CREATE DATABASE `{database}` CHARACTER SET utf8mb4", connection);
-            await create.ExecuteNonQueryAsync();
-        }
-
-        admin.Database = database;
-        _connectionString = admin.ConnectionString;
+        _connectionString = await mysql.CreateDatabaseAsync();
         await using var context = Context();
         await context.Database.MigrateAsync();
     }

@@ -16,11 +16,8 @@ public sealed class AuditPartitionTests(MySqlFixture mysql) : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _database = $"partitions_{Guid.NewGuid():N}";
-        var admin = new MySqlConnectionStringBuilder(mysql.ConnectionString) { UserID = "root", Database = string.Empty };
-        await ExecuteAsync(admin.ConnectionString, $"CREATE DATABASE `{_database}` CHARACTER SET utf8mb4");
-        admin.Database = _database;
-        _connectionString = admin.ConnectionString;
+        _connectionString = await mysql.CreateDatabaseAsync();
+        _database = new MySqlConnectionStringBuilder(_connectionString).Database;
         await AuditTestDb.MigrateAsync(_connectionString);
     }
 
@@ -127,7 +124,7 @@ public sealed class AuditPartitionTests(MySqlFixture mysql) : IAsyncLifetime
     [Fact]
     public async Task Run_AsAUserThatMayOnlyReadAndInsert_Fails_AndAuditWritesStillWork()
     {
-        var user = $"app_{Guid.NewGuid():N}"[..20];
+        var user = mysql.NewUserName();
         await ExecuteAsync(_connectionString, $"CREATE USER '{user}'@'%' IDENTIFIED BY 'Test-only-password-1'");
         await ExecuteAsync(_connectionString, $"GRANT SELECT, INSERT ON `{_database}`.`audit_log` TO '{user}'@'%'");
         var limited = new MySqlConnectionStringBuilder(_connectionString) { UserID = user, Password = "Test-only-password-1" }

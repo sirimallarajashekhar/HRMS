@@ -115,7 +115,7 @@ Generic, multi-tenant HRMS for organisations with 500+ employees. Specs: docs/PR
 
 ## Commands
 - Build: dotnet build Hrms.sln
-- Test: dotnet test Hrms.sln (integration tests need Docker running: Testcontainers starts MySQL 8.4)
+- Test: dotnet test Hrms.sln (integration tests need Docker running: Testcontainers starts MySQL 8.4). Without Docker, set HRMS_TEST_MYSQL to the root connection string of a local MySQL 8.4 and add --settings tests/local-mysql.runsettings (see README). New test databases are created only through MySqlFixture.CreateDatabaseAsync, so they are dropped afterwards.
 - Run API: dotnet run --project src/Host/Hrms.Api
 - Local infra: cp .env.example .env && docker compose up -d --wait (add --profile app to also run API + worker in containers)
 - Web: cd web && npm start / npm test

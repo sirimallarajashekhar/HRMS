@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  For integration tests against a local MySQL server (HRMS_TEST_MYSQL). Every test class shares that one server, and some tests read
+  server-wide counters, so test collections must not run in parallel. Not used with containers.
+-->
+<RunSettings>
+  <xUnit>
+    <ParallelizeTestCollections>false</ParallelizeTestCollections>
+  </xUnit>
+</RunSettings>

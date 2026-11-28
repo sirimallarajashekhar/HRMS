@@ -5,7 +5,6 @@ using Hrms.Core.Infrastructure.Persistence;
 using Hrms.Core.IntegrationTests.Persistence;
 using Hrms.SharedKernel;
 using Microsoft.EntityFrameworkCore;
-using MySqlConnector;
 
 namespace Hrms.Core.IntegrationTests.Core;
 
@@ -17,21 +16,10 @@ public static class CoreTestDb
     /// <summary>Returns a connection string for a new, migrated database. Uses root because the app user cannot create databases.</summary>
     public static async Task<string> CreateMigratedAsync(MySqlFixture mysql)
     {
-        var database = $"core_{Guid.NewGuid():N}";
-        var admin = new MySqlConnectionStringBuilder(mysql.ConnectionString) { UserID = "root", Database = string.Empty };
-
-        await using (var connection = new MySqlConnection(admin.ConnectionString))
-        {
-            await connection.OpenAsync();
-            await using var create = new MySqlCommand($"CREATE DATABASE `{database}` CHARACTER SET utf8mb4", connection);
-            await create.ExecuteNonQueryAsync();
-        }
-
-        admin.Database = database;
-        var connectionString = admin.ConnectionString;
+        var connectionString = await mysql.CreateDatabaseAsync();
         await using var context = Context(connectionString, tenant: null);
         await context.Database.MigrateAsync();
-        await AuditTestDb.MigrateAsync(admin.ConnectionString);
+        await AuditTestDb.MigrateAsync(connectionString);
         return connectionString;
     }
 

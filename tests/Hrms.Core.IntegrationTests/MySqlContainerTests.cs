@@ -3,23 +3,8 @@ using System.Net;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using MySqlConnector;
-using Testcontainers.MySql;
 
 namespace Hrms.Core.IntegrationTests;
-
-/// <summary>One real MySQL 8.4 container shared by every test in this collection (starts in a few seconds).</summary>
-public sealed class MySqlFixture : IAsyncLifetime
-{
-    private readonly MySqlContainer _container = new MySqlBuilder("mysql:8.4")
-        .WithCommand("--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci", "--default-time-zone=+00:00", "--max-connections=1000")
-        .Build();
-
-    public string ConnectionString => _container.GetConnectionString();
-
-    public Task InitializeAsync() => _container.StartAsync();
-
-    public Task DisposeAsync() => _container.DisposeAsync().AsTask();
-}
 
 [CollectionDefinition(Name)]
 public sealed class MySqlTestGroup : ICollectionFixture<MySqlFixture>
