@@ -5,6 +5,9 @@ public interface IActorContext
 {
     /// <summary>The acting user, or null for the system (background jobs, seeding) until authentication arrives in P0.4.</summary>
     Guid? ActorId { get; }
+
+    /// <summary>What the audit log records about the caller besides <see cref="ActorId"/>. The system unless an implementation says otherwise.</summary>
+    AuditOrigin Origin => AuditOrigin.System;
 }
 
 /// <summary>Default actor: the system.</summary>

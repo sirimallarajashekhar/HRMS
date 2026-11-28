@@ -8,6 +8,7 @@ namespace Hrms.Identity.Domain.Roles;
 /// A named set of permissions, defined per tenant. System roles are the shipped defaults: they can be renamed but their MFA
 /// requirement cannot be switched off, so a tenant cannot quietly weaken the protection on its own administrators.
 /// </summary>
+[Audited]
 public sealed partial class Role : TenantEntity
 {
     public const int CodeMaxLength = 64;
@@ -103,6 +104,7 @@ public sealed partial class Role : TenantEntity
 }
 
 /// <summary>Grants one catalogued permission to one role (stored in the role_permission table).</summary>
+[Audited(RootType = "role", RootKey = nameof(RoleId))]
 public sealed class RoleGrant : TenantEntity
 {
     private RoleGrant(Guid roleId, string permissionCode)

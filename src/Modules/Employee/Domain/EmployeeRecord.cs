@@ -9,6 +9,7 @@ namespace Hrms.Employee.Domain;
 /// the last working day, so nothing has to flip at midnight. Persisted as the <c>employee</c> table (the type is named EmployeeRecord
 /// because a type called Employee would be shadowed by the Hrms.Employee namespace).
 /// </summary>
+[Audited]
 public sealed partial class EmployeeRecord : TenantEntity
 {
     public const int CodeMaxLength = 32;

@@ -40,6 +40,7 @@ if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOIN
     otel.UseOtlpExporter();
 }
 
-builder.Services.AddHrmsWorker(builder.Configuration.GetConnectionString("Mysql"));
+builder.Services.AddHrmsWorker(
+    builder.Configuration.GetConnectionString("Mysql"), builder.Configuration.GetConnectionString("MysqlMaintenance"));
 
 await builder.Build().RunAsync();

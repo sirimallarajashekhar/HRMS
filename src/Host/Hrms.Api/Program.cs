@@ -5,6 +5,7 @@ using Asp.Versioning.Builder;
 using Hrms.Api;
 using Hrms.Api.Bootstrap;
 using Hrms.Api.Health;
+using Hrms.Audit.Api;
 using Hrms.Core.Api;
 using Hrms.Core.Api.Org;
 using Hrms.Core.Infrastructure;
@@ -78,6 +79,7 @@ builder.Services.AddCoreInfrastructure(mysqlConnectionString);
 builder.Services.AddIdentityInfrastructure(mysqlConnectionString);
 builder.Services.AddEmployeeInfrastructure(mysqlConnectionString);
 builder.Services.AddWorkflowInfrastructure(mysqlConnectionString);
+builder.Services.AddAuditHistory(mysqlConnectionString);
 builder.Services.AddIdentityServer(builder.Configuration, builder.Environment);
 
 // Deny by default. Real JWT authentication replaces the placeholder scheme when the token server is wired in.
@@ -121,6 +123,7 @@ v1.MapAccountEndpoints();
 v1.MapUserEndpoints();
 v1.MapEmployeeEndpoints();
 v1.MapWorkflowEndpoints();
+v1.MapAuditEndpoints();
 
 // The OAuth token endpoint lives outside /api/v1: it is part of the OAuth protocol, not of the versioned API.
 app.MapTokenEndpoint();

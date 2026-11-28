@@ -7,7 +7,8 @@ public sealed record MfaEnrollment(string Secret, string ProvisioningUri);
 
 /// <summary>
 /// Self-service account operations for the signed-in user of the current tenant: set up and turn off MFA, change the password.
-/// Every operation acts on the caller's own account; none takes another user's id.
+/// Every operation acts on the caller's own account; none takes another user's id. The two that check a password are refused with
+/// <see cref="AccountErrors.LockedOut"/> while the account is locked, even when what was sent is right.
 /// </summary>
 public interface IAccountService
 {
@@ -31,6 +32,8 @@ public static class AccountErrors
     public static readonly Error WrongCode = Error.Validation("identity.mfa.wrong_code", "The verification code is not correct.");
     public static readonly Error MfaNotEnabled = Error.Conflict("identity.mfa.not_enabled", "MFA is not set up for this account.");
     public static readonly Error MfaRequiredByRole = Error.Forbidden("identity.mfa.required_by_role", "A role on this account requires MFA, so it cannot be turned off.");
+    public static readonly Error LockedOut = Error.Conflict("identity.account.locked", "The account is locked after too many wrong passwords or codes. Try again later.");
+    public static readonly Error ConcurrentChange = Error.Conflict("identity.account.concurrent_change", "The account changed while the request was being processed. Try again.");
 
     public static Error PasswordPolicy(IEnumerable<string> violations) =>
         Error.Validation("identity.account.password_policy", string.Join(",", violations));

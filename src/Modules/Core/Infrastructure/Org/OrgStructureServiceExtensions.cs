@@ -1,5 +1,6 @@
 using Hrms.Core.Application.Org;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Hrms.Core.Infrastructure.Org;
 
@@ -9,6 +10,7 @@ internal static class OrgStructureServiceExtensions
     {
         services.AddScoped<IOrgUnitTypeService, OrgUnitTypeService>();
         services.AddScoped<IOrgUnitService, OrgUnitService>();
+        services.TryAddScoped<Hrms.Contracts.IEmployeeDirectory, NoEmployeeDirectoryForCore>();
         services.AddScoped<IOrgUnitHeadService, OrgUnitHeadService>();
         services.AddScoped<Hrms.Contracts.IOrgUnitHeadLookup, OrgUnitHeadLookup>();
         services.AddScoped<ILocationService, LocationService>();

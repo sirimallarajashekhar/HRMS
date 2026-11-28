@@ -2,6 +2,7 @@ using Hrms.Core.Infrastructure;
 using Hrms.Employee.Infrastructure;
 using Hrms.Identity.Infrastructure;
 using Hrms.Persistence;
+using Hrms.Persistence.Auditing;
 using Hrms.SharedKernel;
 using Hrms.Workflow.Infrastructure;
 
@@ -14,7 +15,11 @@ public static class WorkerServices
     /// things only the API host has (the signed-in user, data scopes), and Development checks every registration at startup. A test
     /// builds exactly this, so a registration the worker cannot satisfy fails the build.
     /// </summary>
-    public static IServiceCollection AddHrmsWorker(this IServiceCollection services, string? mysqlConnectionString)
+    /// <param name="maintenanceConnectionString">
+    /// A user that may alter audit_log. Without one the ordinary connection is used, which works only where that user may.
+    /// </param>
+    public static IServiceCollection AddHrmsWorker(
+        this IServiceCollection services, string? mysqlConnectionString, string? maintenanceConnectionString = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -27,6 +32,8 @@ public static class WorkerServices
         services.AddScoped<TenantContext>();
         services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantContext>());
         services.AddHrmsPersistence(mysqlConnectionString);
+        services.AddAuditPartitionMaintenance(
+            string.IsNullOrWhiteSpace(maintenanceConnectionString) ? mysqlConnectionString : maintenanceConnectionString);
         services.AddCoreInfrastructure(mysqlConnectionString);
 
         // The employee module: events that become due, and the outbox relay.

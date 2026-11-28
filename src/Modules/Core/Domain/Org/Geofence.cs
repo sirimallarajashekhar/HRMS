@@ -3,6 +3,7 @@ using Hrms.SharedKernel;
 namespace Hrms.Core.Domain.Org;
 
 /// <summary>An area (circle or polygon) attached to a location, used later to decide whether a punch happened on site.</summary>
+[Audited(RootType = "location", RootKey = nameof(LocationId))]
 public sealed class Geofence : TenantEntity
 {
     public const int NameMaxLength = 200;

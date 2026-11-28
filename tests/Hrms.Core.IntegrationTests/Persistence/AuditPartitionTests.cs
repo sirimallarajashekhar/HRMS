@@ -1,0 +1,162 @@
+using FluentAssertions;
+using Hrms.Core.IntegrationTests.Identity;
+using Hrms.Persistence;
+using Hrms.Persistence.Auditing;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using MySqlConnector;
+
+namespace Hrms.Core.IntegrationTests.Persistence;
+
+[Collection(MySqlTestGroup.Name)]
+public sealed class AuditPartitionTests(MySqlFixture mysql) : IAsyncLifetime
+{
+    private string _connectionString = string.Empty;
+    private string _database = string.Empty;
+
+    public async Task InitializeAsync()
+    {
+        _connectionString = await mysql.CreateDatabaseAsync();
+        _database = new MySqlConnectionStringBuilder(_connectionString).Database;
+        await AuditTestDb.MigrateAsync(_connectionString);
+    }
+
+    public Task DisposeAsync() => Task.CompletedTask;
+
+    private static async Task ExecuteAsync(string connectionString, string sql)
+    {
+        await using var connection = new MySqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new MySqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task<List<string>> ColumnAsync(string sql)
+    {
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var command = new MySqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        var values = new List<string>();
+        while (await reader.ReadAsync())
+        {
+            values.Add(reader.GetValue(0).ToString()!);
+        }
+
+        return values;
+    }
+
+    private Task<List<string>> PartitionsAsync() => ColumnAsync(
+        "SELECT partition_name FROM information_schema.partitions "
+        + "WHERE table_schema = DATABASE() AND table_name = 'audit_log' ORDER BY partition_ordinal_position");
+
+    private static Task InsertAtAsync(string connectionString, string occurredAt) => ExecuteAsync(
+        connectionString,
+        "INSERT INTO audit_log (id, tenant_id, occurred_at, entity_type, record_id, root_type, root_id, action, changes, actor_type) "
+        + $"VALUES (UUID_TO_BIN(UUID()), UUID_TO_BIN(UUID()), '{occurredAt}', 'thing', UUID_TO_BIN(UUID()), 'thing', "
+        + "UUID_TO_BIN(UUID()), 1, '[]', 1)");
+
+    private static AuditPartitionMaintenance Maintenance(string connectionString, string today, IJobLock? jobLock = null) => new(
+        new AuditMaintenanceConnection(connectionString),
+        Options.Create(new AuditPartitionOptions { MonthsAhead = 12 }),
+        jobLock ?? new FreeLock(),
+        new MovableClock(DateTimeOffset.Parse(today + "T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture)),
+        NullLogger<AuditPartitionMaintenance>.Instance);
+
+    [Fact]
+    public async Task Run_AddsTheMonthsAhead_AndCanBeRepeated()
+    {
+        var maintenance = Maintenance(_connectionString, "2027-10-15");
+
+        var run = await maintenance.RunAsync(CancellationToken.None);
+
+        run!.CatchAllHasRows.Should().BeFalse();
+        run.Added.Select(p => p.Name).Should().HaveCount(10).And.StartWith("p202801").And.EndWith("p202810");
+        (await PartitionsAsync()).Should().EndWith(["p202809", "p202810", "p_future"]);
+        (await maintenance.RunAsync(CancellationToken.None))!.Added.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Run_WhenTheCatchAllHoldsRows_ChangesNothing_AndGivesAStatementThatAddsTheMonths()
+    {
+        await InsertAtAsync(_connectionString, "2028-03-10 12:00:00");
+        var before = await PartitionsAsync();
+        var maintenance = Maintenance(_connectionString, "2027-10-15");
+
+        var run = await maintenance.RunAsync(CancellationToken.None);
+
+        run!.CatchAllHasRows.Should().BeTrue();
+        run.Added.Should().BeEmpty();
+        (await PartitionsAsync()).Should().Equal(before);
+
+        // What the operator does with the logged statement.
+        await ExecuteAsync(_connectionString, run.ManualStatement!);
+
+        (await ColumnAsync("SELECT COUNT(*) FROM audit_log PARTITION (p202803)")).Should().Equal("1");
+        (await ColumnAsync("SELECT COUNT(*) FROM audit_log")).Should().Equal("1");
+        var after = await maintenance.RunAsync(CancellationToken.None);
+        after!.CatchAllHasRows.Should().BeFalse();
+        after.Added.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Run_WhenNoMonthIsMissingButTheCatchAllHoldsRows_StillReportsIt()
+    {
+        await InsertAtAsync(_connectionString, "2031-01-01 00:00:00");
+
+        var run = await Maintenance(_connectionString, "2026-11-15").RunAsync(CancellationToken.None);
+
+        run!.CatchAllHasRows.Should().BeTrue();
+        run.ManualStatement.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Run_WhenAnotherInstanceHoldsTheLock_DoesNothing()
+    {
+        var before = await PartitionsAsync();
+
+        var run = await Maintenance(_connectionString, "2027-10-15", new HeldLock()).RunAsync(CancellationToken.None);
+
+        run.Should().BeNull();
+        (await PartitionsAsync()).Should().Equal(before);
+    }
+
+    [Fact]
+    public async Task Run_AsAUserThatMayOnlyReadAndInsert_Fails_AndAuditWritesStillWork()
+    {
+        var user = mysql.NewUserName();
+        await ExecuteAsync(_connectionString, $"CREATE USER '{user}'@'%' IDENTIFIED BY 'Test-only-password-1'");
+        await ExecuteAsync(_connectionString, $"GRANT SELECT, INSERT ON `{_database}`.`audit_log` TO '{user}'@'%'");
+        var limited = new MySqlConnectionStringBuilder(_connectionString) { UserID = user, Password = "Test-only-password-1" }
+            .ConnectionString;
+
+        var run = () => Maintenance(limited, "2027-10-15").RunAsync(CancellationToken.None);
+
+        // The error code matters: any other failure (a bad connection, a bad statement) would prove nothing about the grants.
+        (await run.Should().ThrowAsync<MySqlException>()).Which.ErrorCode.Should().Be(MySqlErrorCode.TableAccessDenied);
+        await InsertAtAsync(limited, "2027-03-10 12:00:00");
+        foreach (var statement in new[] { "UPDATE audit_log SET reason = 'rewritten'", "DELETE FROM audit_log" })
+        {
+            var attempt = () => ExecuteAsync(limited, statement);
+            (await attempt.Should().ThrowAsync<MySqlException>("these grants make the log append-only in the database"))
+                .Which.ErrorCode.Should().Be(MySqlErrorCode.TableAccessDenied);
+        }
+    }
+
+    private sealed class FreeLock : IJobLock
+    {
+        public Task<IAsyncDisposable?> TryAcquireAsync(string name, CancellationToken cancellationToken) =>
+            Task.FromResult<IAsyncDisposable?>(new Lease());
+
+        private sealed class Lease : IAsyncDisposable
+        {
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class HeldLock : IJobLock
+    {
+        public Task<IAsyncDisposable?> TryAcquireAsync(string name, CancellationToken cancellationToken) =>
+            Task.FromResult<IAsyncDisposable?>(null);
+    }
+}

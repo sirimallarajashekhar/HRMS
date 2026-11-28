@@ -1,3 +1,4 @@
+using Hrms.Persistence.Auditing;
 using Hrms.SharedKernel;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -22,6 +23,8 @@ public abstract class TenantDbContext(
     IActorContext actorContext,
     TimeProvider timeProvider) : DbContext(options)
 {
+    private readonly List<SecurityEvent> _securityEvents = [];
+
     /// <summary>The tenant the filters compare against. Empty when none is resolved, which no row can match.</summary>
     protected TenantId CurrentTenantId => tenantContext.TenantId ?? default;
 
@@ -29,6 +32,7 @@ public abstract class TenantDbContext(
     {
         base.OnModelCreating(modelBuilder);
         ConfigureEntities(modelBuilder);
+        ConfigureAuditLog(modelBuilder);
         ApplyConventions(modelBuilder);
     }
 
@@ -45,16 +49,160 @@ public abstract class TenantDbContext(
         configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
     }
 
-    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    /// <summary>
+    /// True only for the one context whose migrations create the audit table. Every other context with audited entities maps the same
+    /// table so its audit rows are saved in the same transaction as the change, but leaves it out of its migrations.
+    /// </summary>
+    protected virtual bool OwnsAuditTable => false;
+
+    /// <summary>
+    /// Adds a security event to the audit log. It is written by the next save, in the same transaction as the other changes, and lasts
+    /// only while <paramref name="subject"/> stays tracked: clearing the change tracker to retry drops it along with the change.
+    /// </summary>
+    /// <param name="details">What happened. Never what the person typed: no password, code or other secret.</param>
+    /// <param name="provenActorId">
+    /// The user the request has just proved it is, for a request that has no signed-in caller yet (a sign-in). Null keeps the caller of
+    /// the request.
+    /// </param>
+    public void RecordSecurityEvent(
+        TenantEntity subject, AuditAction action, IReadOnlyList<AuditFieldChange> details, Guid? provenActorId = null)
     {
-        StampTenantAndAudit();
-        return base.SaveChanges(acceptAllChangesOnSuccess);
+        ArgumentNullException.ThrowIfNull(subject);
+        ArgumentNullException.ThrowIfNull(details);
+
+        // Creations, updates and deletions are only ever captured from the real changes, so nothing can claim one that did not happen.
+        if (action is not (AuditAction.SignedIn or AuditAction.CredentialRefused or AuditAction.LockedOut))
+        {
+            throw new ArgumentOutOfRangeException(nameof(action), action, "Not a security event.");
+        }
+
+        if (!AuditCapture.IsAudited(subject.GetType()) || Entry(subject).State == EntityState.Detached)
+        {
+            throw new InvalidOperationException("A security event needs an audited record that this context is tracking.");
+        }
+
+        _securityEvents.Add(new SecurityEvent(subject, action, details, provenActorId));
     }
 
-    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        var audit = PrepareSave();
+        try
+        {
+            var written = base.SaveChanges(acceptAllChangesOnSuccess);
+            _securityEvents.Clear();
+            return written - audit.Count;
+        }
+        finally
+        {
+            Detach(audit);
+        }
+    }
+
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        var audit = PrepareSave();
+        try
+        {
+            var written = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            _securityEvents.Clear();
+            return written - audit.Count;
+        }
+        finally
+        {
+            Detach(audit);
+        }
+    }
+
+    private List<AuditEntry> PrepareSave()
+    {
+        // The audit log is written here and nowhere else, and what is written never changes.
+        if (ChangeTracker.Entries<AuditEntry>().Any(e => e.State is not EntityState.Unchanged))
+        {
+            throw new InvalidOperationException("The audit log is append-only and is written only by the persistence layer.");
+        }
+
         StampTenantAndAudit();
-        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        _securityEvents.RemoveAll(e => Entry(e.Subject).State == EntityState.Detached);
+
+        if (_securityEvents.Count == 0
+            && !ChangeTracker.Entries<TenantEntity>().Any(e => e.State is EntityState.Added or EntityState.Modified))
+        {
+            return [];
+        }
+
+        var tenantId = tenantContext.Require();
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var audit = AuditCapture.Capture(ChangeTracker, tenantId, now, actorContext);
+        audit.AddRange(_securityEvents.Select(e => ToEntry(e, tenantId, now)));
+        AddRange(audit);
+        return audit;
+    }
+
+    private AuditEntry ToEntry(SecurityEvent securityEvent, TenantId tenantId, DateTime now)
+    {
+        var subject = Entry(securityEvent.Subject);
+        if (subject.Entity.TenantId != tenantId)
+        {
+            throw new CrossTenantWriteException(subject.Metadata.ClrType.Name);
+        }
+
+        // The change reason a caller may send describes a change; on a security event it would only be unproven text.
+        var origin = actorContext.Origin with { Reason = null };
+        var actorId = actorContext.ActorId;
+        if (securityEvent.ProvenActorId is { } proven)
+        {
+            origin = origin with { ActorType = AuditActorType.User, ClientId = null };
+            actorId = proven;
+        }
+
+        return AuditCapture.Event(subject, securityEvent.Action, securityEvent.Details, actorId, origin, tenantId, now);
+    }
+
+    /// <summary>
+    /// Always, so a failed save leaves no audit rows behind: a caller that retries would otherwise record the change once more for
+    /// every attempt.
+    /// </summary>
+    private void Detach(List<AuditEntry> audit)
+    {
+        foreach (var entry in audit)
+        {
+            Entry(entry).State = EntityState.Detached;
+        }
+    }
+
+    private void ConfigureAuditLog(ModelBuilder modelBuilder)
+    {
+        var hasAuditedEntity = modelBuilder.Model.GetEntityTypes().Any(e => AuditCapture.IsAudited(e.ClrType));
+        if (!OwnsAuditTable && !hasAuditedEntity)
+        {
+            return;
+        }
+
+        var entity = modelBuilder.Entity<AuditEntry>();
+        entity.ToTable("audit_log", table =>
+        {
+            if (!OwnsAuditTable)
+            {
+                table.ExcludeFromMigrations();
+            }
+        });
+
+        // MySQL requires the partitioning column in every unique key, the primary key included.
+        entity.HasKey(e => new { e.TenantId, e.OccurredAt, e.Id });
+        entity.Property(e => e.Id).ValueGeneratedNever();
+        entity.Property(e => e.EntityType).HasMaxLength(AuditEntry.EntityTypeMaxLength).IsRequired();
+        entity.Property(e => e.RootType).HasMaxLength(AuditEntry.EntityTypeMaxLength).IsRequired();
+        entity.Property(e => e.Action).HasConversion<int>();
+        entity.Property(e => e.ActorType).HasConversion<int>();
+        entity.Property(e => e.Changes).HasColumnType("json").IsRequired();
+        entity.Property(e => e.ClientId).HasMaxLength(AuditEntry.ClientIdMaxLength);
+        entity.Property(e => e.IpAddress).HasMaxLength(AuditEntry.IpAddressMaxLength);
+        entity.Property(e => e.Reason).HasMaxLength(AuditEntry.ReasonMaxLength);
+        entity.Property(e => e.CorrelationId).HasMaxLength(AuditEntry.CorrelationIdMaxLength);
+        entity.HasIndex(e => new { e.TenantId, e.RootType, e.RootId, e.OccurredAt, e.Id }).HasDatabaseName("ix_audit_log_tenant_root");
+        entity.HasIndex(e => new { e.TenantId, e.EntityType, e.RecordId, e.OccurredAt, e.Id }).HasDatabaseName("ix_audit_log_tenant_record");
+        entity.HasQueryFilter(e => e.TenantId == CurrentTenantId);
     }
 
     private void ApplyConventions(ModelBuilder modelBuilder)
@@ -169,6 +317,9 @@ public abstract class TenantDbContext(
             version.CurrentValue = version.OriginalValue + 1;
         }
     }
+
+    private sealed record SecurityEvent(
+        TenantEntity Subject, AuditAction Action, IReadOnlyList<AuditFieldChange> Details, Guid? ProvenActorId);
 
     private sealed class TenantIdConverter()
         : ValueConverter<TenantId, Guid>(v => v.Value, v => new TenantId(v));

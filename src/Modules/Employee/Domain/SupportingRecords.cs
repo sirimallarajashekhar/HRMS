@@ -7,6 +7,7 @@ namespace Hrms.Employee.Domain;
 /// A national or statutory id (PAN, Aadhaar, SSN... the kinds come from the country pack). The value is stored encrypted, bound to this
 /// row, field and tenant, and nothing about it is kept in the clear: masked views decrypt and mask, so even a very short id is never exposed.
 /// </summary>
+[Audited(RootType = "employee", RootKey = nameof(EmployeeId))]
 public sealed partial class StatutoryId : TenantEntity
 {
     public const int IdTypeMaxLength = 32;
@@ -28,6 +29,7 @@ public sealed partial class StatutoryId : TenantEntity
     public string IdType { get; private set; }
 
     /// <summary>The encrypted value (see IFieldEncryptor); never the plaintext.</summary>
+    [AuditSensitive]
     public string ProtectedValue { get; private set; }
 
     public static Result<string> NormaliseType(string? idType)
@@ -57,6 +59,7 @@ public sealed partial class StatutoryId : TenantEntity
 }
 
 /// <summary>Metadata of a document held for an employee (contract, ID proof, visa). The file itself lives in object storage under an opaque key.</summary>
+[Audited(RootType = "employee", RootKey = nameof(EmployeeId))]
 public sealed class EmployeeDocument : TenantEntity
 {
     public const int TypeMaxLength = 64;
@@ -83,6 +86,7 @@ public sealed class EmployeeDocument : TenantEntity
     public string Title { get; private set; }
 
     /// <summary>Opaque key in object storage; null until a file is attached.</summary>
+    [AuditSensitive]
     public string? FileKey { get; private set; }
 
     public DateOnly? IssuedOn { get; private set; }
@@ -156,6 +160,7 @@ public enum DeviceStatus
 }
 
 /// <summary>A device an employee may punch from. One device belongs to one employee at a time; revoking it keeps the record.</summary>
+[Audited(RootType = "employee", RootKey = nameof(EmployeeId))]
 public sealed class EmployeeDevice : TenantEntity
 {
     public const int DeviceIdMaxLength = 128;
@@ -222,6 +227,7 @@ public sealed class EmployeeDevice : TenantEntity
 }
 
 /// <summary>A consent an employee gave (or withdrew) for a purpose, with the version of the text they agreed to.</summary>
+[Audited(RootType = "employee", RootKey = nameof(EmployeeId))]
 public sealed class EmployeeConsent : TenantEntity
 {
     public const int TypeMaxLength = 64;

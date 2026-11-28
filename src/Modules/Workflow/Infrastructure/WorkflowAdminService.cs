@@ -1,6 +1,7 @@
 using Hrms.Contracts;
 using Hrms.Contracts.Events;
 using Hrms.Contracts.Workflow;
+using Hrms.Persistence;
 using Hrms.SharedKernel;
 using Hrms.Workflow.Application;
 using Hrms.Workflow.Domain;

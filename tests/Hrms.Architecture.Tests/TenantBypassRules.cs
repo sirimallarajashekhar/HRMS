@@ -23,6 +23,11 @@ public static partial class TenantBypassRules
             [],
             "raw SQL through EF skips the query filter; use a LINQ query or TenantDbConnection"),
         new(
+            "EF bulk writes (ExecuteUpdate*, ExecuteDelete*)",
+            new Regex(@"\b(ExecuteUpdate|ExecuteDelete)(Async)?\s*[<(]", RegexOptions.CultureInvariant),
+            [],
+            "bulk writes skip SaveChanges, so nothing is stamped or audited; load the entities and save them"),
+        new(
             "Direct MySQL or Dapper access",
             new Regex(@"\b(new\s+MySqlConnection\s*\(|MySqlDataSource\b|using\s+Dapper\s*;|DbDataSource\b)", RegexOptions.CultureInvariant),
             [

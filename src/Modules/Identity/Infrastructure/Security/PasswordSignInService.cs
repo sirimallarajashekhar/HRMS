@@ -5,6 +5,7 @@ using Hrms.Identity.Application;
 using Hrms.Identity.Domain.Mfa;
 using Hrms.Identity.Domain.Users;
 using Hrms.Identity.Infrastructure.Persistence;
+using Hrms.Persistence;
 using Hrms.SharedKernel;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -28,12 +29,6 @@ public sealed partial class PasswordSignInService(
     TimeProvider timeProvider,
     ILogger<PasswordSignInService> logger) : IPasswordSignInService
 {
-    /// <summary>
-    /// Parallel guesses update the same account row, so each failure is recorded with an optimistic retry. The budget is generous
-    /// and jittered: a burst of N simultaneous guesses needs up to N attempts for the slowest, and losing a count would help the attacker.
-    /// </summary>
-    private const int ConcurrencyRetries = 30;
-
     public async Task<Result<SignedInUser>> SignInAsync(
         string tenantCode, string email, string password, MfaProof? mfa, CancellationToken cancellationToken)
     {
@@ -68,12 +63,13 @@ public sealed partial class PasswordSignInService(
 
         if (check == PasswordCheck.Failed)
         {
-            await RegisterFailureAsync(user.Id, now, cancellationToken);
+            await RegisterFailureAsync(user.Id, now, SecurityEvents.Password, cancellationToken);
             return Result.Failure<SignedInUser>(SignInErrors.InvalidCredentials);
         }
 
         var roles = await LoadRolesAsync(user.Id, cancellationToken);
         var enrollmentOnly = false;
+        string? secondFactor = null;
 
         if (user.MfaEnabled)
         {
@@ -83,9 +79,10 @@ public sealed partial class PasswordSignInService(
                 return Result.Failure<SignedInUser>(SignInErrors.MfaCodeRequired);
             }
 
+            secondFactor = string.IsNullOrWhiteSpace(mfa.TotpCode) ? SecurityEvents.RecoveryCode : SecurityEvents.Totp;
             if (!await VerifySecondFactorAsync(user, tenantId.Value, mfa, now, cancellationToken))
             {
-                await RegisterFailureAsync(user.Id, now, cancellationToken);
+                await RegisterFailureAsync(user.Id, now, secondFactor, cancellationToken);
                 return Result.Failure<SignedInUser>(SignInErrors.InvalidCredentials);
             }
         }
@@ -101,13 +98,27 @@ public sealed partial class PasswordSignInService(
             user.ReplacePasswordHash(passwordHasher.Hash(password));
         }
 
+        SecurityEvents.SignedIn(db, user, secondFactor, enrollmentOnly);
+
         try
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateConcurrencyException)
+        catch (Exception ex) when (WriteConflicts.IsDatabaseFailure(ex))
         {
-            // Another sign-in changed the account at the same moment (for example it used the same code first): refuse, the client retries.
+            // Refused whatever failed. A lost race (another sign-in used the same code first) is routine: the client retries. For
+            // any other failure the refusal matters too: if wrong passwords were refused as usual (and not counted) while the right
+            // one caused a server error, that error would confirm a guess.
+            db.ChangeTracker.Clear();
+            if (WriteConflicts.Is(ex))
+            {
+                LogRefused(logger, "concurrent_change");
+            }
+            else
+            {
+                LogSignInSaveFailed(logger, ex);
+            }
+
             return Result.Failure<SignedInUser>(SignInErrors.InvalidCredentials);
         }
 
@@ -195,31 +206,39 @@ public sealed partial class PasswordSignInService(
         tenantContext.Set(id);
     }
 
-    private async Task RegisterFailureAsync(Guid userId, DateTime now, CancellationToken cancellationToken)
+    /// <summary>
+    /// A database failure here is logged and not thrown: the caller then gives the usual refusal, as it would for an account that
+    /// does not exist. An error only real accounts can cause would tell them apart.
+    /// </summary>
+    private async Task RegisterFailureAsync(Guid userId, DateTime now, string factor, CancellationToken cancellationToken)
     {
-        var policy = await policies.LockoutAsync(DateOnly.FromDateTime(now), cancellationToken);
-
-        for (var attempt = 0; attempt < ConcurrencyRetries; attempt++)
+        try
         {
-            var user = await db.Users.SingleAsync(u => u.Id == userId, cancellationToken);
-            var outcome = user.RegisterFailedAttempt(now, policy);
-            try
+            var policy = await policies.LockoutAsync(DateOnly.FromDateTime(now), cancellationToken);
+            var outcome = await FailedAttempts.RecordAsync(db, userId, now, policy, SecurityEvents.DuringSignIn, factor, cancellationToken);
+            LogRefused(logger, outcome is { LockedNow: true } ? "locked" : "wrong_credentials");
+            if (outcome is null)
             {
-                await db.SaveChangesAsync(cancellationToken);
-                LogRefused(logger, outcome.LockedNow ? "locked" : "wrong_credentials");
-                return;
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                // Guesses arriving in parallel update the same row; reload and count again so none is lost. The random pause
-                // spreads the retries out so contenders stop colliding on the same instant.
-                db.ChangeTracker.Clear();
-                await Task.Delay(Random.Shared.Next(1, 4 + (attempt * 2)), cancellationToken);
+                LogAttemptNotRecorded(logger);
             }
         }
-
-        LogRefused(logger, "wrong_credentials");
+        catch (Exception ex) when (WriteConflicts.IsDatabaseFailure(ex))
+        {
+            db.ChangeTracker.Clear();
+            LogAttemptSaveFailed(logger, ex);
+        }
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "A wrong password or code could not be counted or logged: every try lost a race")]
+    private static partial void LogAttemptNotRecorded(ILogger logger);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "ACTION NEEDED: a wrong password or code could not be counted or logged, so lockout may not be working")]
+    private static partial void LogAttemptSaveFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "ACTION NEEDED: a sign-in could not be saved, so it was refused")]
+    private static partial void LogSignInSaveFailed(ILogger logger, Exception exception);
 
     private async Task<List<RoleInfo>> LoadRolesAsync(Guid userId, CancellationToken cancellationToken) =>
         await db.UserRoleScopes.AsNoTracking()

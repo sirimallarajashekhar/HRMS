@@ -12,6 +12,7 @@
     <ProjectReference Include="../../Modules/Identity/Infrastructure/Hrms.Identity.Infrastructure.csproj" />
     <ProjectReference Include="../../Modules/Workflow/Api/Hrms.Workflow.Api.csproj" />
     <ProjectReference Include="../../Modules/Workflow/Infrastructure/Hrms.Workflow.Infrastructure.csproj" />
+    <ProjectReference Include="../../Platform/Hrms.Audit/Hrms.Audit.csproj" />
     <ProjectReference Include="../../Platform/Hrms.Http/Hrms.Http.csproj" />
     <ProjectReference Include="../../Platform/Hrms.Logging/Hrms.Logging.csproj" />
     <ProjectReference Include="../../SharedKernel/Hrms.SharedKernel/Hrms.SharedKernel.csproj" />

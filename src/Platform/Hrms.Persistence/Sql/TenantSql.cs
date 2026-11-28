@@ -41,6 +41,8 @@ public static partial class TenantSql
             throw Reject($"Only SELECT, WITH, INSERT, UPDATE and DELETE are allowed (found '{verb}').");
         }
 
+        RejectAuditLogWrites(code, verb);
+
         if (verb == "insert")
         {
             ValidateInsert(code);
@@ -55,6 +57,19 @@ public static partial class TenantSql
         if (verb == "update" && SetClause().Match(code) is { Success: true } set && TenantColumn().IsMatch(set.Groups["set"].Value))
         {
             throw Reject("tenant_id is immutable and cannot be assigned in an UPDATE.");
+        }
+    }
+
+    /// <summary>
+    /// Only <see cref="TenantDbContext"/> writes the audit log. A writing statement may not name the table at all, even only to read
+    /// it: telling the target from a joined table would need a SQL parser. WITH can lead into an UPDATE or DELETE.
+    /// </summary>
+    private static void RejectAuditLogWrites(string code, string verb)
+    {
+        var writes = verb is "insert" or "update" or "delete" || (verb == "with" && WritingKeyword().IsMatch(code));
+        if (writes && AuditLogTable().IsMatch(code))
+        {
+            throw Reject("The audit log is append-only: a statement that writes may not name audit_log.");
         }
     }
 
@@ -159,6 +174,12 @@ public static partial class TenantSql
 
     [GeneratedRegex(@"^\s*\w+", RegexOptions.CultureInvariant)]
     private static partial Regex FirstWord();
+
+    [GeneratedRegex(@"(?<!\w)audit_log(?!\w)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex AuditLogTable();
+
+    [GeneratedRegex(@"\b(insert|update|delete)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex WritingKeyword();
 
     [GeneratedRegex(@"(?<!\w)(?:\w+\.)?tenant_id\s*=\s*@TenantId(?!\w)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TenantPredicate();

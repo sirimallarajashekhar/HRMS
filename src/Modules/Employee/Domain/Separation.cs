@@ -15,6 +15,7 @@ public enum SeparationType
 /// The recorded end of an employee's employment (at most one per employee). It carries the last working day, which the employee record
 /// mirrors so "employed on a date" needs no join. The separated event goes out the day after the last working day.
 /// </summary>
+[Audited(RootType = "employee", RootKey = nameof(EmployeeId))]
 public sealed class Separation : TenantEntity
 {
     public const int ReasonMaxLength = 500;
@@ -45,6 +46,7 @@ public sealed class Separation : TenantEntity
     public string? Reason { get; private set; }
 
     /// <summary>When the separated event was published (null until the day after the last working day, then set by the daily job).</summary>
+    [AuditIgnore]
     public DateTime? EventPublishedAt { get; private set; }
 
     public static Result<Separation> Create(Guid employeeId, SeparationType type, DateOnly? noticeDate, DateOnly lastWorkingDay, string? reason)

@@ -32,6 +32,7 @@ public enum ScopeType
 /// Scopes that point at one thing (department, location, legal entity) need its id; the others must not carry one.
 /// "No value" is stored as an empty Guid so that a unique index treats two identical grants as the duplicates they are.
 /// </summary>
+[Audited(RootType = "user_account", RootKey = nameof(UserId))]
 public sealed class UserRoleScope : TenantEntity
 {
     private UserRoleScope(Guid userId, Guid roleId, ScopeType scopeType, Guid scopeValue)

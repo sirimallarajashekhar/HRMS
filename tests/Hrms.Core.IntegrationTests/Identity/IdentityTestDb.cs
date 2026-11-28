@@ -8,7 +8,6 @@ using Hrms.Identity.Infrastructure.Security;
 using Hrms.SharedKernel;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using MySqlConnector;
 
 namespace Hrms.Core.IntegrationTests.Identity;
 
@@ -33,20 +32,11 @@ public static class IdentityTestDb
 
     public static async Task<string> CreateMigratedAsync(MySqlFixture mysql)
     {
-        var database = $"identity_{Guid.NewGuid():N}";
-        var admin = new MySqlConnectionStringBuilder(mysql.ConnectionString) { UserID = "root", Database = string.Empty };
-
-        await using (var connection = new MySqlConnection(admin.ConnectionString))
-        {
-            await connection.OpenAsync();
-            await using var create = new MySqlCommand($"CREATE DATABASE `{database}` CHARACTER SET utf8mb4", connection);
-            await create.ExecuteNonQueryAsync();
-        }
-
-        admin.Database = database;
-        await using var context = Context(admin.ConnectionString, tenant: null);
+        var connectionString = await mysql.CreateDatabaseAsync();
+        await using var context = Context(connectionString, tenant: null);
         await context.Database.MigrateAsync();
-        return admin.ConnectionString;
+        await AuditTestDb.MigrateAsync(connectionString);
+        return connectionString;
     }
 
     public static IdentityDbContext Context(string connectionString, TenantId? tenant, TimeProvider? time = null, Guid? actor = null)

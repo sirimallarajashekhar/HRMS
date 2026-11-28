@@ -45,6 +45,27 @@ public class TenantSqlTests
         FluentActions.Invoking(() => TenantSql.Validate(sql)).Should().Throw<ArgumentException>().WithMessage("*Unsafe tenant SQL*");
 
     [Theory]
+    [InlineData("UPDATE audit_log SET reason = @Reason WHERE tenant_id = @TenantId")]
+    [InlineData("DELETE FROM audit_log WHERE tenant_id = @TenantId")]
+    [InlineData("delete from `AUDIT_LOG` where tenant_id = @TenantId")]
+    [InlineData("DELETE FROM hrms.audit_log WHERE tenant_id = @TenantId")]
+    [InlineData("INSERT INTO audit_log (id, tenant_id) VALUES (@Id, @TenantId)")]
+    [InlineData("UPDATE widget w JOIN audit_log a ON a.record_id = w.id SET a.reason = @Reason WHERE w.tenant_id = @TenantId")]
+    [InlineData("DELETE a FROM widget w JOIN audit_log a ON a.record_id = w.id WHERE w.tenant_id = @TenantId")]
+    [InlineData("WITH old AS (SELECT id FROM widget WHERE tenant_id = @TenantId) DELETE FROM audit_log WHERE tenant_id = @TenantId")]
+    [InlineData("WITH old AS (SELECT id FROM widget WHERE tenant_id = @TenantId) UPDATE audit_log SET reason = NULL WHERE tenant_id = @TenantId")]
+    public void Validate_StatementThatCouldWriteTheAuditLog_IsRejected(string sql) =>
+        FluentActions.Invoking(() => TenantSql.Validate(sql)).Should().Throw<ArgumentException>().WithMessage("*audit log is append-only*");
+
+    [Theory]
+    [InlineData("SELECT action FROM audit_log WHERE tenant_id = @TenantId")]
+    [InlineData("WITH a AS (SELECT root_id FROM audit_log WHERE tenant_id = @TenantId) SELECT root_id FROM a")]
+    [InlineData("DELETE FROM audit_log_export WHERE tenant_id = @TenantId")]
+    [InlineData("UPDATE widget SET name = 'audit_log' WHERE tenant_id = @TenantId")]
+    public void Validate_StatementThatCannotWriteTheAuditLog_IsAccepted(string sql) =>
+        FluentActions.Invoking(() => TenantSql.Validate(sql)).Should().NotThrow();
+
+    [Theory]
     [InlineData("SELECT 1 FROM widget WHERE tenant_id = @TenantId; DELETE FROM widget")]
     [InlineData("SELECT 1 FROM widget WHERE tenant_id = @TenantId; SELECT 2 FROM widget WHERE tenant_id = @TenantId")]
     public void Validate_MoreThanOneStatement_IsRejected(string sql) =>

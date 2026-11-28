@@ -9,7 +9,7 @@ namespace Hrms.Architecture.Tests;
 /// </summary>
 public static partial class SolutionModel
 {
-    public static readonly string[] PlatformAssemblyNames = ["Hrms.Policy", "Hrms.Notifications", "Hrms.Persistence", "Hrms.Http", "Hrms.Logging"];
+    public static readonly string[] PlatformAssemblyNames = ["Hrms.Policy", "Hrms.Notifications", "Hrms.Persistence", "Hrms.Http", "Hrms.Logging", "Hrms.Audit"];
 
     [GeneratedRegex(@"^Hrms\.(?<module>[A-Za-z0-9]+)\.(?<layer>Domain|Application|Infrastructure|Api)$")]
     private static partial Regex ModuleAssemblyPattern();

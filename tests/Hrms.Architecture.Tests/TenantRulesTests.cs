@@ -4,6 +4,7 @@ using Hrms.Core.Infrastructure.Persistence;
 using Hrms.Identity.Infrastructure;
 using Hrms.Identity.Infrastructure.Persistence;
 using Hrms.Persistence;
+using Hrms.Persistence.Auditing;
 using Hrms.SharedKernel;
 using Hrms.Workflow.Infrastructure;
 using Hrms.Workflow.Infrastructure.Persistence;
@@ -30,6 +31,8 @@ public class TenantRulesTests
     [InlineData("db.Database.SqlQuery<int>($\"select 1\");", "EF raw SQL")]
     [InlineData("await using var c = new MySqlConnection(cs);", "Direct MySQL")]
     [InlineData("using Dapper;", "Direct MySQL")]
+    [InlineData("await db.Widgets.ExecuteUpdateAsync(s => s);", "EF bulk writes")]
+    [InlineData("await db.Widgets.Where(w => w.Id == id).ExecuteDeleteAsync(ct);", "EF bulk writes")]
     [InlineData("var source = new MySqlDataSourceBuilder(cs).Build(); MySqlDataSource x;", "Direct MySQL")]
     public void BypassScanner_FlagsEachForbiddenApi(string source, string expectedRule)
     {
@@ -99,6 +102,7 @@ public class TenantRulesTests
         using var context = CoreContext();
 
         var unfiltered = context.Model.GetEntityTypes()
+            .Where(e => e.ClrType != typeof(AuditEntry))
             .Where(e => !e.ClrType.IsAssignableTo(typeof(TenantEntity)))
             .Select(e => e.ClrType.Name);
 
@@ -139,6 +143,7 @@ public class TenantRulesTests
         using var context = IdentityContext();
 
         var unfiltered = context.Model.GetEntityTypes()
+            .Where(e => e.ClrType != typeof(AuditEntry))
             .Where(e => !e.ClrType.IsAssignableTo(typeof(TenantEntity)))
             .Select(e => e.ClrType)
             .ToArray();
@@ -175,7 +180,8 @@ public class TenantRulesTests
 
         declared.Should().NotBeEmpty();
         declared.Where(t => context.Model.FindEntityType(t) is null).Should().BeEmpty();
-        context.Model.GetEntityTypes().Where(e => !e.ClrType.IsAssignableTo(typeof(TenantEntity))).Should().BeEmpty();
+        context.Model.GetEntityTypes()
+            .Where(e => e.ClrType != typeof(AuditEntry) && !e.ClrType.IsAssignableTo(typeof(TenantEntity))).Should().BeEmpty();
     }
 
     private sealed class Unindexed : TenantEntity;
